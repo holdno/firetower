@@ -1,0 +1,5 @@
+# 连接配置
+
+chanLens = 1000 # channal 缓冲区大小
+heartbeat = 600 # 心跳间隔 单位秒(s)
+heartbeatContent = "heartbeat from beacontower" # 心跳包发送的内容
