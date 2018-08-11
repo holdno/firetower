@@ -23,23 +23,22 @@ type TcpClient struct {
 }
 
 type TopicEvent struct {
-	Topic []string `json:"topic"`
-	DATA  []byte   `json:"data"`
-	Type  string   `json:"type"`
+	Topic []string    `json:"topic"`
+	DATA  interface{} `json:"data"`
+	Type  string      `json:"type"`
 }
 
 type PushMessage struct {
 	Topic string
-	Data  []byte
+	Data  interface{}
 }
 
 func NewClient(address string) *TcpClient {
 	return &TcpClient{
-		Address:   address,
-		closeChan: make(chan struct{}),
-		isClose:   false,
-		readIn:    make(chan []byte, 1024),
-		sendOut:   make(chan []byte, 1024),
+		Address: address,
+		isClose: false,
+		readIn:  make(chan []byte, 1024),
+		sendOut: make(chan []byte, 1024),
 	}
 }
 
@@ -48,6 +47,8 @@ func (t *TcpClient) Connect() error {
 	if err != nil {
 		return err
 	}
+	t.isClose = false
+	t.closeChan = make(chan struct{})
 	t.Conn = lis
 
 	go func() {
@@ -167,12 +168,12 @@ func (t *TcpClient) DelTopic(topic []string) error {
 	}
 }
 
-func (t *TcpClient) Publish(topic string, data string) error {
+func (t *TcpClient) Publish(topic string, data interface{}) error {
 	// 发消息只能发送一条
 	message := &TopicEvent{
 		Topic: []string{topic},
 		Type:  PublishKey,
-		DATA:  []byte(data),
+		DATA:  data,
 	}
 
 	if data, err := json.Marshal(message); err == nil {
@@ -183,7 +184,7 @@ func (t *TcpClient) Publish(topic string, data string) error {
 	}
 }
 
-func (t *TcpClient) OnPush(fn func(topic string, message []byte)) {
+func (t *TcpClient) OnPush(fn func(topic string, message interface{})) {
 	go func() {
 		for {
 			message, err := t.Read()

@@ -22,15 +22,15 @@ type FireInfo struct {
 }
 
 type TopicMessage struct {
-	Topic string `json:"topic"`
-	Data  string `json:"data"` // 可能是个json
+	Topic string      `json:"topic"`
+	Data  interface{} `json:"data"` // 可能是个json
 }
 
 // 发送的消息结构体
 // 发送不用限制用户消息内容的格式
 type SendMessage struct {
 	MessageType int
-	Data        []byte
+	Data        interface{}
 }
 
 type BeaconTower struct {
@@ -58,8 +58,8 @@ func init() {
 		if err != nil {
 			panic(fmt.Sprintf("[topic manager] can not get local IP, error:%v", err))
 		}
-		topicManage.OnPush(func(topic string, message []byte) {
-			fmt.Println("[topic manager] on push", "topic:", string(topic), "data:", string(message))
+		topicManage.OnPush(func(topic string, message interface{}) {
+			fmt.Println("[topic manager] on push", "topic:", string(topic), "data:", message)
 			value, ok := store.TopicTable.Load(topic)
 			if ok {
 				conns := value.([]*BeaconTower)
@@ -197,7 +197,8 @@ func (t *BeaconTower) sendLoop() {
 	for {
 		select {
 		case message := <-t.sendOut:
-			if err := t.ws.WriteMessage(message.MessageType, message.Data); err != nil {
+			sendMessage, _ := json.Marshal(message.Data)
+			if err := t.ws.WriteMessage(message.MessageType, sendMessage); err != nil {
 				goto collapse
 			}
 		case <-heartTicker.C:
@@ -256,33 +257,39 @@ func (t *BeaconTower) readDispose() {
 			t.LogError(fmt.Sprintf("read message failed:%v", err))
 			continue
 		}
-		fmt.Println(string(message.Data.Data))
-		switch string(message.Data.Data) {
-		case "subscribe": // 客户端订阅topic
-			if message.Data.Topic == "" {
-				t.LogError(fmt.Sprintf("onSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
-				continue
-			}
-			addTopic := strings.Split(message.Data.Topic, ",")
-			t.BindTopic(addTopic)
-		case "unSubscribe": // 客户端取消订阅topic
-			if message.Data.Topic == "" {
-				t.LogError(fmt.Sprintf("unOnSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
-				continue
-			}
-			delTopic := strings.Split(message.Data.Topic, ",")
-			t.UnbindTopic(delTopic)
-		default:
-			if t.isClose {
-				return
-			}
-			if t.readHandler != nil {
-				ok := t.readHandler(message.Data)
-				if !ok {
-					t.Close()
+		value, err := json.Marshal(message.Data.Data)
+		if err == nil {
+			fmt.Println(string(value))
+			switch string(value) {
+			// TODO interface{} to string 会转成 "subscribe" 后面看怎么优化掉这个"
+			case "\"subscribe\"": // 客户端订阅topic
+				if message.Data.Topic == "" {
+					t.LogError(fmt.Sprintf("onSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
+					continue
+				}
+				addTopic := strings.Split(message.Data.Topic, ",")
+				t.BindTopic(addTopic)
+			case "\"unSubscribe\"": // 客户端取消订阅topic
+				if message.Data.Topic == "" {
+					t.LogError(fmt.Sprintf("unOnSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
+					continue
+				}
+				delTopic := strings.Split(message.Data.Topic, ",")
+				t.UnbindTopic(delTopic)
+			default:
+				if t.isClose {
 					return
 				}
+				if t.readHandler != nil {
+					ok := t.readHandler(message.Data)
+					if !ok {
+						t.Close()
+						return
+					}
+				}
 			}
+		} else {
+			// TODO 正常情况下不会出现无法json序列化的情况 因为这个参数本身就是string to json来的
 		}
 	}
 }

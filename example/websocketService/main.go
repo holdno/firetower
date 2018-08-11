@@ -28,7 +28,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	tower := gateway.BuildTower(ws)
 
 	tower.SetReadHandler(func(message *gateway.TopicMessage) bool {
-		fmt.Println(string(message.Data))
+		fmt.Println(message.Data)
 		// 做发送验证
 		// 判断发送方是否有权限向到达方发送内容
 		tower.Publish(message)
