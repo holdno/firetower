@@ -38,37 +38,6 @@ func tcpConnect() {
 		fmt.Println("new socket connect")
 		go tcpHandler(conn)
 		go heartbeat(conn)
-		go pushd() // 自动测试代码
-	}
-}
-
-func pushd() {
-	time.Sleep(10 * time.Second)
-	t := time.NewTicker(1 * time.Second)
-	for {
-		select {
-		case <-t.C:
-			b, err := json.Marshal(&socket.PushMessage{
-				Topic: "/user/123123",
-				Data:  []byte(time.Now().Format("2006-01-02 15:04:05")),
-			})
-			topicRelevance.Range(func(key, value interface{}) bool {
-				if key == "/user/123123" {
-					table := value.(*list.List)
-					for e := table.Front(); e != nil; e = e.Next() {
-						fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
-						_, err = e.Value.(*topicRelevanceItem).conn.Write(b)
-						if err != nil {
-							// 直接操作table.Remove 可以改变map中list的值
-							e.Value.(*topicRelevanceItem).conn.Close()
-							table.Remove(e)
-						}
-					}
-				}
-				return true
-			})
-
-		}
 	}
 }
 
