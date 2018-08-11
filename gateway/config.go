@@ -1,4 +1,4 @@
-package logic
+package gateway
 
 import (
 	"fmt"
@@ -9,22 +9,20 @@ type BeaconTowerConfig struct {
 	chanLens         int
 	heartbeat        int
 	heartbeatContent string
+	topicServiceAddr string
 }
 
 var (
-	BTConfig *BeaconTowerConfig
+	BTConfig   *BeaconTowerConfig
+	ConfigTree *toml.Tree
 )
 
 func init() {
 	var (
-		tree *toml.Tree
-		err  error
+		err error
 	)
-	if tree, err = toml.LoadFile("./config/beaconTower.toml"); err != nil {
+	if ConfigTree, err = toml.LoadFile("/Users/wangboyan/development/golang/src/github.com/holdno/beacon/config/beaconTower.toml"); err != nil {
 		fmt.Println("config load failed:", err)
-	} else {
-		BTConfig = new(BeaconTowerConfig)
-		tree.Unmarshal(BTConfig)
 	}
 
 }
