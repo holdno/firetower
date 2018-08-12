@@ -14,7 +14,10 @@ import (
 	"time"
 )
 
-var topicRelevance sync.Map
+var (
+	topicRelevance sync.Map
+	ConnIndexTable sync.Map
+)
 
 type topicRelevanceItem struct {
 	ip   string
@@ -45,9 +48,65 @@ func (t *topicGrpcService) GetConnectNum(ctx context.Context, request *pb.GetCon
 	value, ok := topicRelevance.Load(request.Topic)
 	var num int64
 	if ok {
-		num = int64(value.(*list.List).Len())
+		l, _ := value.(*list.List)
+		for e := l.Front(); e != nil; e = e.Next() {
+			num += e.Value.(*topicRelevanceItem).num
+		}
 	}
 	return &pb.GetConnectNumResponse{Number: num}, nil
+}
+
+// topic 订阅
+func (t *topicGrpcService) SubscribeTopic(ctx context.Context, request *pb.SubscribeTopicRequest) (*pb.SubscribeTopicResponse, error) {
+	for _, topic := range request.Topic {
+		var store *list.List
+		value, ok := topicRelevance.Load(topic)
+		if !ok {
+			// topic map 里面维护一个链表
+			store = list.New()
+			store.PushBack(&topicRelevanceItem{
+				ip:  request.Ip,
+				num: 1,
+			})
+			topicRelevance.Store(topic, store)
+		} else {
+			store = value.(*list.List)
+			for e := store.Front(); e != nil; e = e.Next() {
+				if e.Value.(*topicRelevanceItem).ip == request.Ip {
+					e.Value.(*topicRelevanceItem).num++
+				}
+			}
+		}
+	}
+	return &pb.SubscribeTopicResponse{}, nil
+}
+
+// topic 取消订阅
+func (t *topicGrpcService) UnSubscribeTopic(ctx context.Context, request *pb.UnSubscribeTopicRequest) (*pb.UnSubscribeTopicResponse, error) {
+	for _, topic := range request.Topic {
+		value, ok := topicRelevance.Load(topic)
+		if !ok {
+			// topic 没有存在订阅列表中直接过滤
+			continue
+		} else {
+			store := value.(*list.List)
+			for e := store.Front(); e != nil; e = e.Next() {
+				if e.Value.(*topicRelevanceItem).ip == request.Ip {
+					if e.Value.(*topicRelevanceItem).num-1 == 0 {
+						store.Remove(e)
+						if store.Len() == 0 {
+							topicRelevance.Delete(topic)
+						}
+					} else {
+						// 这里修改是直接修改map内部值
+						e.Value.(*topicRelevanceItem).num--
+					}
+					break
+				}
+			}
+		}
+	}
+	return &pb.UnSubscribeTopicResponse{}, nil
 }
 
 func grpcService() {
@@ -79,13 +138,34 @@ func tcpConnect() {
 	}
 }
 
+func connOffLine(conn net.Conn) {
+	conn.Close()
+	topicRelevance.Range(func(key, value interface{}) bool {
+		store, _ := value.(*list.List)
+		for e := store.Front(); e != nil; e = e.Next() {
+			if e.Value.(*topicRelevanceItem).ip == conn.RemoteAddr().String() {
+				store.Remove(e)
+			}
+		}
+		if store.Len() == 0 {
+			topicRelevance.Delete(key)
+		}
+		return true
+	})
+}
+
 func tcpHandler(conn net.Conn) {
 	for {
 		var a = make([]byte, 1024)
 		l, err := conn.Read(a)
 		if err != nil {
-			conn.Close()
+			connOffLine(conn)
 			return
+		}
+		// 维护一个IP->连接关系的索引map
+		_, ok := ConnIndexTable.Load(conn.RemoteAddr().String())
+		if !ok {
+			ConnIndexTable.Store(conn.RemoteAddr().String(), conn)
 		}
 		fmt.Println("new message:", string(a))
 		message := new(socket.TopicEvent)
@@ -95,94 +175,13 @@ func tcpHandler(conn net.Conn) {
 			continue
 		}
 		for _, topic := range message.Topic {
-			if message.Type == socket.SubKey {
-				var store *list.List
-				value, ok := topicRelevance.Load(topic)
-				if !ok {
-					// topic map 里面维护一个链表
-					store = list.New()
-					store.PushBack(&topicRelevanceItem{
-						ip:   conn.RemoteAddr().String(),
-						num:  1,
-						conn: conn,
-					})
-					topicRelevance.Store(topic, store)
-				} else {
-					ip := conn.RemoteAddr().String()
-					store = value.(*list.List)
-					for e := store.Front(); e != nil; e = e.Next() {
-						if e.Value.(*topicRelevanceItem).ip == ip {
-							e.Value.(*topicRelevanceItem).num++
-						}
-					}
-				}
-				b, err := json.Marshal(&socket.PushMessage{
-					Topic: topic,
-					Type:  message.Type,
-				})
-				for e := store.Front(); e != nil; e = e.Next() {
-					fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
-					_, err = e.Value.(*topicRelevanceItem).conn.Write(b)
-					if err != nil {
-						// 直接操作table.Remove 可以改变map中list的值
-						e.Value.(*topicRelevanceItem).conn.Close()
-						store.Remove(e)
-					}
-				}
-				fmt.Println("topicRelevance:")
-				topicRelevance.Range(func(key, value interface{}) bool {
-					fmt.Println(key, value)
-					return true
-				})
-			} else if message.Type == socket.UnSubKey { // 取消订阅事件
+			if message.Type == socket.PublishKey {
 				value, ok := topicRelevance.Load(topic)
 				if !ok {
 					// topic 没有存在订阅列表中直接过滤
 					continue
 				} else {
-					ip := conn.RemoteAddr().String()
-					store := value.(*list.List)
-					for e := store.Front(); e != nil; e = e.Next() {
-						if e.Value.(*topicRelevanceItem).ip == ip {
-							if e.Value.(*topicRelevanceItem).num-1 == 0 {
-								store.Remove(e)
-								if store.Len() == 0 {
-									topicRelevance.Delete(topic)
-								}
-							} else {
-								// 这里修改是直接修改map内部值
-								e.Value.(*topicRelevanceItem).num--
-							}
-							break
-						}
-					}
-					b, err := json.Marshal(&socket.PushMessage{
-						Topic: topic,
-						Type:  message.Type,
-					})
-					for e := store.Front(); e != nil; e = e.Next() {
-						fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
-						_, err = e.Value.(*topicRelevanceItem).conn.Write(b)
-						if err != nil {
-							// 直接操作table.Remove 可以改变map中list的值
-							e.Value.(*topicRelevanceItem).conn.Close()
-							store.Remove(e)
-						}
-					}
-				}
-
-				fmt.Println("topicRelevance:")
-				topicRelevance.Range(func(key, value interface{}) bool {
-					fmt.Println(key, value)
-					return true
-				})
-			} else if message.Type == socket.PublishKey {
-				value, ok := topicRelevance.Load(topic)
-				if !ok {
-					// topic 没有存在订阅列表中直接过滤
-					continue
-				} else {
-					b, err := json.Marshal(&socket.PushMessage{
+					b, _ := json.Marshal(&socket.PushMessage{
 						Topic: topic,
 						Data:  message.DATA,
 						Type:  message.Type,
@@ -190,11 +189,15 @@ func tcpHandler(conn net.Conn) {
 					table := value.(*list.List)
 					for e := table.Front(); e != nil; e = e.Next() {
 						fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
-						_, err = e.Value.(*topicRelevanceItem).conn.Write(b)
-						if err != nil {
-							// 直接操作table.Remove 可以改变map中list的值
-							e.Value.(*topicRelevanceItem).conn.Close()
-							table.Remove(e)
+
+						conn, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
+						if ok {
+							_, err = conn.(net.Conn).Write(b)
+							if err != nil {
+								// 直接操作table.Remove 可以改变map中list的值
+								connOffLine(conn.(net.Conn))
+								continue
+							}
 						}
 					}
 				}
@@ -210,7 +213,7 @@ func heartbeat(conn net.Conn) {
 		<-t.C
 		_, err := conn.Write([]byte("heartbeat"))
 		if err != nil {
-			conn.Close()
+			connOffLine(conn)
 			return
 		}
 	}

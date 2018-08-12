@@ -47,21 +47,27 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		return true
 	})
 
-	tower.SetSubscribeHandler(func(topic, data string) bool {
-		num := tower.GetConnectNum(topic)
+	tower.SetSubscribeHandler(func(topic []string) bool {
+		for _, v := range topic {
+			num := tower.GetConnectNum(v)
 
-		var pushmsg = new(gateway.TopicMessage)
-		pushmsg.Topic = topic
-		pushmsg.Data = fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num)
-		tower.Publish(pushmsg)
+			var pushmsg = new(gateway.TopicMessage)
+			pushmsg.Topic = v
+			pushmsg.Data = fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num)
+			tower.Publish(pushmsg)
+		}
+
 		return true
 	})
-	tower.SetUnSubscribeHandler(func(topic, data string) bool {
-		num := tower.GetConnectNum(topic)
-		var pushmsg = new(gateway.TopicMessage)
-		pushmsg.Topic = topic
-		pushmsg.Data = fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num)
-		tower.Publish(pushmsg)
+	tower.SetUnSubscribeHandler(func(topic []string) bool {
+		for _, v := range topic {
+			num := tower.GetConnectNum(v)
+			var pushmsg = new(gateway.TopicMessage)
+			pushmsg.Topic = v
+			pushmsg.Data = fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num)
+			tower.Publish(pushmsg)
+		}
+
 		return true
 	})
 	fmt.Println("new websocket running")

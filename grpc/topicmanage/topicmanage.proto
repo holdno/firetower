@@ -5,6 +5,8 @@ package topicproto;
 
 service TopicService {
     rpc GetConnectNum(GetConnectNumRequest) returns (GetConnectNumResponse){}
+    rpc SubscribeTopic(SubscribeTopicRequest) returns (SubscribeTopicResponse){}
+    rpc UnSubscribeTopic(UnSubscribeTopicRequest) returns (UnSubscribeTopicResponse){}
 }
 
 message GetConnectNumRequest {
@@ -13,4 +15,22 @@ message GetConnectNumRequest {
 
 message GetConnectNumResponse {
     int64 Number = 1;
+}
+
+message SubscribeTopicRequest {
+    repeated string Topic = 1;
+    string Ip = 2;
+}
+
+message SubscribeTopicResponse {
+
+}
+
+message UnSubscribeTopicRequest {
+    repeated string Topic = 1;
+    string Ip = 2;
+}
+
+message UnSubscribeTopicResponse {
+
 }

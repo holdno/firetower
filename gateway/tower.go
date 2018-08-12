@@ -51,8 +51,8 @@ type BeaconTower struct {
 	mutex       sync.Mutex        // 避免并发close chan
 
 	readHandler            func(*TopicMessage) bool
-	subscribeHandler       func(topic, data string) bool
-	unSubscribeHandler     func(topic, data string) bool
+	subscribeHandler       func(topic []string) bool
+	unSubscribeHandler     func(topic []string) bool
 	beforeSubscribeHandler func(topic []string) bool
 }
 
@@ -74,17 +74,11 @@ func init() {
 					conn, ok := store.TowerIndexTable.Load(v)
 					if ok {
 						v, _ := conn.(*BeaconTower)
-						switch t {
-						case socket.SubKey:
-							v.Event(socket.SubKey, topic, message)
-						case socket.UnSubKey:
-							v.Event(socket.UnSubKey, topic, message)
-						default:
-							v.Send(&SendMessage{
-								websocket.TextMessage,
-								message,
-							})
-						}
+
+						v.Send(&SendMessage{
+							websocket.TextMessage,
+							message,
+						})
 					}
 				}
 			}
@@ -154,13 +148,17 @@ func (t *BeaconTower) BindTopic(topic []string) bool {
 			if ok {
 				valueType := value.([]string)
 				// 验证当前节点是否已经在该topic下 防止重复订阅
+				exist := false
 				for _, v := range valueType {
 					if v == t.ClientId {
+						exist = true
 						break
 					}
 				}
-				valueType = append(valueType, t.ClientId)
-				store.TopicTable.Store(v, valueType)
+				if !exist {
+					valueType = append(valueType, t.ClientId)
+					store.TopicTable.Store(v, valueType)
+				}
 			} else {
 				var valueType []string
 				valueType = append(valueType, t.ClientId)
@@ -168,11 +166,16 @@ func (t *BeaconTower) BindTopic(topic []string) bool {
 			}
 		}
 	}
-	err := topicManage.AddTopic(addTopic)
-	if err != nil {
-		// 订阅失败影响客户端正常业务逻辑 直接关闭连接
-		t.Close()
-		return false
+	if len(addTopic) > 0 {
+		_, err := TopicManageGrpc.SubscribeTopic(context.Background(), &pb.SubscribeTopicRequest{Topic: addTopic, Ip: topicManage.Conn.LocalAddr().String()})
+		if err != nil {
+			// 订阅失败影响客户端正常业务逻辑 直接关闭连接
+			t.Close()
+		} else {
+			if t.subscribeHandler != nil {
+				t.subscribeHandler(addTopic)
+			}
+		}
 	}
 	return true
 }
@@ -197,11 +200,16 @@ func (t *BeaconTower) UnbindTopic(topic []string) bool {
 			}
 		}
 	}
-	err := topicManage.DelTopic(delTopic)
-	if err != nil {
-		// 订阅失败影响客户端正常业务逻辑 直接关闭连接
-		t.Close()
-		return false
+	if len(delTopic) > 0 {
+		_, err := TopicManageGrpc.UnSubscribeTopic(context.Background(), &pb.UnSubscribeTopicRequest{Topic: delTopic, Ip: topicManage.Conn.LocalAddr().String()})
+		if err != nil {
+			// 订阅失败影响客户端正常业务逻辑 直接关闭连接
+			t.Close()
+		} else {
+			if t.subscribeHandler != nil {
+				t.unSubscribeHandler(delTopic)
+			}
+		}
 	}
 	return true
 }
@@ -352,18 +360,18 @@ func (t *BeaconTower) readDispose() {
 	}
 }
 
-func (t *BeaconTower) Event(event, topic, message string) {
-	switch event {
-	case socket.SubKey:
-		if t.subscribeHandler != nil {
-			t.subscribeHandler(topic, message)
-		}
-	case socket.UnSubKey:
-		if t.subscribeHandler != nil {
-			t.unSubscribeHandler(topic, message)
-		}
-	}
-}
+//func (t *BeaconTower) Event(event, topic, message string) {
+//	switch event {
+//	case socket.SubKey:
+//		if t.subscribeHandler != nil {
+//			t.subscribeHandler(topic)
+//		}
+//	case socket.UnSubKey:
+//		if t.subscribeHandler != nil {
+//			t.unSubscribeHandler(topic, message)
+//		}
+//	}
+//}
 
 func (t *BeaconTower) Publish(message *TopicMessage) {
 	topicManage.Publish(message.Topic, message.Data)
@@ -375,12 +383,12 @@ func (t *BeaconTower) SetReadHandler(fn func(*TopicMessage) bool) {
 }
 
 // 用户订阅topic后触发
-func (t *BeaconTower) SetSubscribeHandler(fn func(topic, data string) bool) {
+func (t *BeaconTower) SetSubscribeHandler(fn func(topic []string) bool) {
 	t.subscribeHandler = fn
 }
 
 // 用户取消订阅topic后触发
-func (t *BeaconTower) SetUnSubscribeHandler(fn func(topic, data string) bool) {
+func (t *BeaconTower) SetUnSubscribeHandler(fn func(topic []string) bool) {
 	t.unSubscribeHandler = fn
 }
 
@@ -391,6 +399,9 @@ func (t *BeaconTower) SetBeforeSubscribeHandler(fn func(topic []string) bool) {
 
 // grpc方法封装
 func (t *BeaconTower) GetConnectNum(topic string) int64 {
-	res, _ := TopicManageGrpc.GetConnectNum(context.Background(), &pb.GetConnectNumRequest{Topic: topic})
+	res, err := TopicManageGrpc.GetConnectNum(context.Background(), &pb.GetConnectNumRequest{Topic: topic})
+	if err != nil {
+		return 0
+	}
 	return res.Number
 }
