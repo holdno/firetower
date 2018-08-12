@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/holdno/beacon/gateway"
+	"github.com/holdno/snowFlakeByGo"
 	"net/http"
+	"strconv"
 )
 
 var upgrader = websocket.Upgrader{
@@ -13,7 +15,10 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+var GlobalIdWorker *snowFlakeByGo.Worker
+
 func main() {
+	GlobalIdWorker, _ = snowFlakeByGo.NewWorker(1)
 	http.HandleFunc("/ws", Websocket)
 	fmt.Println("websocket service start: 0.0.0.0:9999")
 	http.ListenAndServe("0.0.0.0:9999", nil)
@@ -25,13 +30,38 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	// 验证成功才升级连接
 	ws, _ := upgrader.Upgrade(w, r, nil)
 
-	tower := gateway.BuildTower(ws)
+	id := GlobalIdWorker.GetId()
+	tower := gateway.BuildTower(ws, strconv.FormatInt(id, 10))
 
 	tower.SetReadHandler(func(message *gateway.TopicMessage) bool {
 		fmt.Println(message.Data)
 		// 做发送验证
 		// 判断发送方是否有权限向到达方发送内容
+		message.Data = fmt.Sprintf("{\"type\":\"publish\",\"data\":%s}", message.Data)
 		tower.Publish(message)
+		return true
+	})
+
+	tower.SetBeforeSubscribeHandler(func(topic []string) bool {
+		// 这里用来判断当前用户是否允许订阅该topic
+		return true
+	})
+
+	tower.SetSubscribeHandler(func(topic, data string) bool {
+		num := tower.GetConnectNum(topic)
+
+		var pushmsg = new(gateway.TopicMessage)
+		pushmsg.Topic = topic
+		pushmsg.Data = fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num)
+		tower.Publish(pushmsg)
+		return true
+	})
+	tower.SetUnSubscribeHandler(func(topic, data string) bool {
+		num := tower.GetConnectNum(topic)
+		var pushmsg = new(gateway.TopicMessage)
+		pushmsg.Topic = topic
+		pushmsg.Data = fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num)
+		tower.Publish(pushmsg)
 		return true
 	})
 	fmt.Println("new websocket running")

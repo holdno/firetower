@@ -1,18 +1,21 @@
 package gateway
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"github.com/gorilla/websocket"
+	pb "github.com/holdno/beacon/grpc/topicmanage"
 	"github.com/holdno/beacon/socket"
 	"github.com/holdno/beacon/store"
+	"google.golang.org/grpc"
 	"strings"
 	"sync"
 	"time"
 )
 
 var (
-	topicManage *socket.TcpClient
+	topicManage     *socket.TcpClient
+	TopicManageGrpc pb.TopicServiceClient
 )
 
 // 接收的消息结构体
@@ -22,15 +25,16 @@ type FireInfo struct {
 }
 
 type TopicMessage struct {
-	Topic string      `json:"topic"`
-	Data  interface{} `json:"data"` // 可能是个json
+	Topic string `json:"topic"`
+	Data  string `json:"data"` // 可能是个json
+	Type  string `json:"type"`
 }
 
 // 发送的消息结构体
 // 发送不用限制用户消息内容的格式
 type SendMessage struct {
 	MessageType int
-	Data        interface{}
+	Data        string
 }
 
 type BeaconTower struct {
@@ -46,7 +50,10 @@ type BeaconTower struct {
 	closeSwitch chan struct{}     // 用来作为关闭websocket的触发点
 	mutex       sync.Mutex        // 避免并发close chan
 
-	readHandler func(*TopicMessage) bool
+	readHandler            func(*TopicMessage) bool
+	subscribeHandler       func(topic, data string) bool
+	unSubscribeHandler     func(topic, data string) bool
+	beforeSubscribeHandler func(topic []string) bool
 }
 
 func init() {
@@ -58,16 +65,27 @@ func init() {
 		if err != nil {
 			panic(fmt.Sprintf("[topic manager] can not get local IP, error:%v", err))
 		}
-		topicManage.OnPush(func(topic string, message interface{}) {
+		topicManage.OnPush(func(t, topic, message string) {
 			fmt.Println("[topic manager] on push", "topic:", string(topic), "data:", message)
 			value, ok := store.TopicTable.Load(topic)
 			if ok {
-				conns := value.([]*BeaconTower)
+				conns := value.([]string)
 				for _, v := range conns {
-					v.Send(&SendMessage{
-						websocket.TextMessage,
-						message,
-					})
+					conn, ok := store.TowerIndexTable.Load(v)
+					if ok {
+						v, _ := conn.(*BeaconTower)
+						switch t {
+						case socket.SubKey:
+							v.Event(socket.SubKey, topic, message)
+						case socket.UnSubKey:
+							v.Event(socket.UnSubKey, topic, message)
+						default:
+							v.Send(&SendMessage{
+								websocket.TextMessage,
+								message,
+							})
+						}
+					}
 				}
 			}
 		})
@@ -80,20 +98,31 @@ func init() {
 			fmt.Println("[topic manager] connected:", ConfigTree.Get("topicServiceAddr").(string))
 		}
 	}()
+
 }
 
-func BuildTower(ws *websocket.Conn) (tower *BeaconTower) {
+func BuildTower(ws *websocket.Conn, clientId string) (tower *BeaconTower) {
 	tower = &BeaconTower{
+		ClientId:    clientId,
 		readIn:      make(chan *FireInfo, ConfigTree.Get("chanLens").(int64)),
 		sendOut:     make(chan *SendMessage, ConfigTree.Get("chanLens").(int64)),
 		ws:          ws,
 		isClose:     false,
 		closeSwitch: make(chan struct{}),
 	}
+	store.TowerIndexTable.Store(clientId, tower)
 	return
 }
 
 func (t *BeaconTower) Run() {
+	// grpc连接
+	conn, err := grpc.Dial(ConfigTree.Get("grpc.address").(string), grpc.WithInsecure())
+	if err != nil {
+		fmt.Println("[topic manager] grpc connect error:", ConfigTree.Get("topicServiceAddr").(string), err)
+	}
+	defer conn.Close()
+	TopicManageGrpc = pb.NewTopicServiceClient(conn)
+
 	// 读取websocket信息
 	go t.readLoop()
 	// 处理读取事件
@@ -123,31 +152,47 @@ func (t *BeaconTower) BindTopic(topic []string) bool {
 			// 先判断当前topic是否存在订阅列表中
 			value, ok := store.TopicTable.Load(v)
 			if ok {
-				valueType := value.([]*BeaconTower)
-				valueType = append(valueType, t)
+				valueType := value.([]string)
+				// 验证当前节点是否已经在该topic下 防止重复订阅
+				for _, v := range valueType {
+					if v == t.ClientId {
+						break
+					}
+				}
+				valueType = append(valueType, t.ClientId)
 				store.TopicTable.Store(v, valueType)
 			} else {
-				var valueType []*BeaconTower
-				valueType = append(valueType, t)
+				var valueType []string
+				valueType = append(valueType, t.ClientId)
 				store.TopicTable.Store(v, valueType)
 			}
-			err := topicManage.AddTopic(addTopic)
-			if err != nil {
-				// 订阅失败影响客户端正常业务逻辑 直接关闭连接
-				t.Close()
-				return false
-			}
 		}
+	}
+	err := topicManage.AddTopic(addTopic)
+	if err != nil {
+		// 订阅失败影响客户端正常业务逻辑 直接关闭连接
+		t.Close()
+		return false
 	}
 	return true
 }
 
 func (t *BeaconTower) UnbindTopic(topic []string) bool {
 	var delTopic []string // 待取消订阅的topic列表
+
 	for _, v := range topic {
-		for _, vv := range t.Topic {
+		for k, vv := range t.Topic {
 			if v == vv { // 如果客户端已经订阅过该topic才执行退订
 				delTopic = append(delTopic, v)
+				t.Topic = append(t.Topic[:k], t.Topic[k+1:]...)
+				value, _ := store.TopicTable.Load(v)
+				valueType := value.([]string)
+				for rk, relevance := range valueType {
+					if relevance == t.ClientId {
+						valueType = append(valueType[:rk], valueType[rk+1:]...)
+						store.TopicTable.Store(v, valueType)
+					}
+				}
 				break
 			}
 		}
@@ -185,8 +230,9 @@ func (t *BeaconTower) Close() {
 	if !t.isClose {
 		t.isClose = true
 		if t.Topic != nil {
-			topicManage.DelTopic(t.Topic) // IP目前没什么用
+			t.UnbindTopic(t.Topic)
 		}
+		store.TowerIndexTable.Delete(t.ClientId)
 		t.ws.Close()
 		close(t.closeSwitch)
 	}
@@ -197,14 +243,13 @@ func (t *BeaconTower) sendLoop() {
 	for {
 		select {
 		case message := <-t.sendOut:
-			sendMessage, _ := json.Marshal(message.Data)
-			if err := t.ws.WriteMessage(message.MessageType, sendMessage); err != nil {
+			if err := t.ws.WriteMessage(message.MessageType, []byte(message.Data)); err != nil {
 				goto collapse
 			}
 		case <-heartTicker.C:
 			message := &SendMessage{
 				MessageType: websocket.TextMessage,
-				Data:        []byte(ConfigTree.Get("heartbeatContent").(string)),
+				Data:        ConfigTree.Get("heartbeatContent").(string),
 			}
 			if err := t.Send(message); err != nil {
 				fmt.Println("heartbeat send failed:", err)
@@ -228,12 +273,21 @@ func (t *BeaconTower) readLoop() {
 			goto collapse // 出现问题烽火台直接坍塌
 		}
 		t.LogInfo(fmt.Sprintf("new message:%s", string(data)))
-		var jsonStruct = new(TopicMessage)
-
-		if err := json.Unmarshal(data, &jsonStruct); err != nil {
-			t.LogError(fmt.Sprintf("客户端消息解析错误:%v", err))
+		msg := strings.Split(string(data), messageSplitKey)
+		if len(msg) != 3 {
+			t.LogError(fmt.Sprintf("客户端消息解析错误:数据格式不正确"))
 			continue
 		}
+		var jsonStruct = new(TopicMessage)
+
+		jsonStruct.Type = msg[0]
+		jsonStruct.Topic = msg[1]
+		jsonStruct.Data = msg[2]
+
+		//if err := json.Unmarshal([]byte(), &jsonStruct); err != nil {
+		//	t.LogError(fmt.Sprintf("客户端消息解析错误:%v", err))
+		//	continue
+		//}
 		message := &FireInfo{
 			MessageType: messageType,
 			Data:        jsonStruct,
@@ -257,19 +311,23 @@ func (t *BeaconTower) readDispose() {
 			t.LogError(fmt.Sprintf("read message failed:%v", err))
 			continue
 		}
-		value, err := json.Marshal(message.Data.Data)
 		if err == nil {
-			fmt.Println(string(value))
-			switch string(value) {
-			// TODO interface{} to string 会转成 "subscribe" 后面看怎么优化掉这个"
-			case "\"subscribe\"": // 客户端订阅topic
+			switch message.Data.Type {
+			case "subscribe": // 客户端订阅topic
 				if message.Data.Topic == "" {
 					t.LogError(fmt.Sprintf("onSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
 					continue
 				}
 				addTopic := strings.Split(message.Data.Topic, ",")
+				// 如果设置了订阅前触发事件则调用
+				if t.beforeSubscribeHandler != nil {
+					ok := t.beforeSubscribeHandler(addTopic)
+					if !ok {
+						continue
+					}
+				}
 				t.BindTopic(addTopic)
-			case "\"unSubscribe\"": // 客户端取消订阅topic
+			case "unSubscribe": // 客户端取消订阅topic
 				if message.Data.Topic == "" {
 					t.LogError(fmt.Sprintf("unOnSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
 					continue
@@ -294,10 +352,45 @@ func (t *BeaconTower) readDispose() {
 	}
 }
 
+func (t *BeaconTower) Event(event, topic, message string) {
+	switch event {
+	case socket.SubKey:
+		if t.subscribeHandler != nil {
+			t.subscribeHandler(topic, message)
+		}
+	case socket.UnSubKey:
+		if t.subscribeHandler != nil {
+			t.unSubscribeHandler(topic, message)
+		}
+	}
+}
+
 func (t *BeaconTower) Publish(message *TopicMessage) {
 	topicManage.Publish(message.Topic, message.Data)
 }
 
+// 接收到用户publish的消息时触发
 func (t *BeaconTower) SetReadHandler(fn func(*TopicMessage) bool) {
 	t.readHandler = fn
+}
+
+// 用户订阅topic后触发
+func (t *BeaconTower) SetSubscribeHandler(fn func(topic, data string) bool) {
+	t.subscribeHandler = fn
+}
+
+// 用户取消订阅topic后触发
+func (t *BeaconTower) SetUnSubscribeHandler(fn func(topic, data string) bool) {
+	t.unSubscribeHandler = fn
+}
+
+// 用户订阅topic前触发
+func (t *BeaconTower) SetBeforeSubscribeHandler(fn func(topic []string) bool) {
+	t.beforeSubscribeHandler = fn
+}
+
+// grpc方法封装
+func (t *BeaconTower) GetConnectNum(topic string) int64 {
+	res, _ := TopicManageGrpc.GetConnectNum(context.Background(), &pb.GetConnectNumRequest{Topic: topic})
+	return res.Number
 }

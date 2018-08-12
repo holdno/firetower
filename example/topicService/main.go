@@ -2,9 +2,13 @@ package main
 
 import (
 	"container/list"
+	"context"
 	"encoding/json"
 	"fmt"
+	pb "github.com/holdno/beacon/grpc/topicmanage"
 	"github.com/holdno/beacon/socket"
+	"github.com/pelletier/go-toml"
+	"google.golang.org/grpc"
 	"net"
 	"sync"
 	"time"
@@ -18,8 +22,42 @@ type topicRelevanceItem struct {
 	conn net.Conn
 }
 
+var ConfigTree *toml.Tree
+
+func init() {
+	var (
+		err error
+	)
+	if ConfigTree, err = toml.LoadFile("./topicmanage.toml"); err != nil {
+		fmt.Println("config load failed:", err)
+	}
+}
+
 func main() {
+	go grpcService()
 	tcpConnect()
+}
+
+type topicGrpcService struct{}
+
+// 获取topic订阅数
+func (t *topicGrpcService) GetConnectNum(ctx context.Context, request *pb.GetConnectNumRequest) (*pb.GetConnectNumResponse, error) {
+	value, ok := topicRelevance.Load(request.Topic)
+	var num int64
+	if ok {
+		num = int64(value.(*list.List).Len())
+	}
+	return &pb.GetConnectNumResponse{Number: num}, nil
+}
+
+func grpcService() {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", ConfigTree.Get("grpc.port").(int64)))
+	if err != nil {
+		fmt.Println("grpc service listen error:", err)
+	}
+	s := grpc.NewServer()
+	pb.RegisterTopicServiceServer(s, &topicGrpcService{})
+	s.Serve(lis)
 }
 
 func tcpConnect() {
@@ -56,13 +94,13 @@ func tcpHandler(conn net.Conn) {
 			fmt.Printf("topic message format error:%v\n", err)
 			continue
 		}
-
 		for _, topic := range message.Topic {
 			if message.Type == socket.SubKey {
+				var store *list.List
 				value, ok := topicRelevance.Load(topic)
 				if !ok {
 					// topic map 里面维护一个链表
-					store := list.New()
+					store = list.New()
 					store.PushBack(&topicRelevanceItem{
 						ip:   conn.RemoteAddr().String(),
 						num:  1,
@@ -71,11 +109,24 @@ func tcpHandler(conn net.Conn) {
 					topicRelevance.Store(topic, store)
 				} else {
 					ip := conn.RemoteAddr().String()
-					store := value.(*list.List)
+					store = value.(*list.List)
 					for e := store.Front(); e != nil; e = e.Next() {
 						if e.Value.(*topicRelevanceItem).ip == ip {
 							e.Value.(*topicRelevanceItem).num++
 						}
+					}
+				}
+				b, err := json.Marshal(&socket.PushMessage{
+					Topic: topic,
+					Type:  message.Type,
+				})
+				for e := store.Front(); e != nil; e = e.Next() {
+					fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
+					_, err = e.Value.(*topicRelevanceItem).conn.Write(b)
+					if err != nil {
+						// 直接操作table.Remove 可以改变map中list的值
+						e.Value.(*topicRelevanceItem).conn.Close()
+						store.Remove(e)
 					}
 				}
 				fmt.Println("topicRelevance:")
@@ -97,8 +148,6 @@ func tcpHandler(conn net.Conn) {
 								store.Remove(e)
 								if store.Len() == 0 {
 									topicRelevance.Delete(topic)
-								} else {
-									topicRelevance.Store(topic, store)
 								}
 							} else {
 								// 这里修改是直接修改map内部值
@@ -107,7 +156,21 @@ func tcpHandler(conn net.Conn) {
 							break
 						}
 					}
+					b, err := json.Marshal(&socket.PushMessage{
+						Topic: topic,
+						Type:  message.Type,
+					})
+					for e := store.Front(); e != nil; e = e.Next() {
+						fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
+						_, err = e.Value.(*topicRelevanceItem).conn.Write(b)
+						if err != nil {
+							// 直接操作table.Remove 可以改变map中list的值
+							e.Value.(*topicRelevanceItem).conn.Close()
+							store.Remove(e)
+						}
+					}
 				}
+
 				fmt.Println("topicRelevance:")
 				topicRelevance.Range(func(key, value interface{}) bool {
 					fmt.Println(key, value)
@@ -122,6 +185,7 @@ func tcpHandler(conn net.Conn) {
 					b, err := json.Marshal(&socket.PushMessage{
 						Topic: topic,
 						Data:  message.DATA,
+						Type:  message.Type,
 					})
 					table := value.(*list.List)
 					for e := table.Front(); e != nil; e = e.Next() {

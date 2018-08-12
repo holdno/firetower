@@ -21,7 +21,7 @@ func init() {
 	var (
 		err error
 	)
-	if ConfigTree, err = toml.LoadFile("/Users/wangboyan/development/golang/src/github.com/holdno/beacon/config/beaconTower.toml"); err != nil {
+	if ConfigTree, err = toml.LoadFile("./beaconTower.toml"); err != nil {
 		fmt.Println("config load failed:", err)
 	}
 

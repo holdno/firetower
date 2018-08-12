@@ -1,4 +1,0 @@
-# 内部socket通信配置
-
-heartbeat = 5 # 秒(s) 发送心跳包的间隔时间
-servicetimeout = 8 # 服务端超时时间 超过该时间没有收到client的心跳则断开连接

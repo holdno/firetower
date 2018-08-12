@@ -5,3 +5,6 @@ heartbeat = 600 # 心跳间隔 单位秒(s)
 heartbeatContent = "heartbeat from beacontower" # 心跳包发送的内容
 
 topicServiceAddr = "0.0.0.0:6666"
+
+[grpc]
+address = "localhost:6667"

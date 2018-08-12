@@ -23,14 +23,15 @@ type TcpClient struct {
 }
 
 type TopicEvent struct {
-	Topic []string    `json:"topic"`
-	DATA  interface{} `json:"data"`
-	Type  string      `json:"type"`
+	Topic []string `json:"topic"`
+	DATA  string   `json:"data"`
+	Type  string   `json:"type"`
 }
 
 type PushMessage struct {
-	Topic string
-	Data  interface{}
+	Topic string `json:"topic"`
+	Data  string `json:"data"`
+	Type  string `json:"type"`
 }
 
 func NewClient(address string) *TcpClient {
@@ -168,7 +169,7 @@ func (t *TcpClient) DelTopic(topic []string) error {
 	}
 }
 
-func (t *TcpClient) Publish(topic string, data interface{}) error {
+func (t *TcpClient) Publish(topic, data string) error {
 	// 发消息只能发送一条
 	message := &TopicEvent{
 		Topic: []string{topic},
@@ -184,7 +185,7 @@ func (t *TcpClient) Publish(topic string, data interface{}) error {
 	}
 }
 
-func (t *TcpClient) OnPush(fn func(topic string, message interface{})) {
+func (t *TcpClient) OnPush(fn func(t, topic, message string)) {
 	go func() {
 		for {
 			message, err := t.Read()
@@ -200,7 +201,7 @@ func (t *TcpClient) OnPush(fn func(topic string, message interface{})) {
 				fmt.Sprintf("push message format error:%v", err)
 				continue
 			}
-			fn(data.Topic, data.Data)
+			fn(data.Type, data.Topic, data.Data)
 		}
 	}()
 }

@@ -1,0 +1,16 @@
+// protoc --go_out=plugins=grpc:. topicmanage.proto
+
+syntax = "proto3";
+package topicproto;
+
+service TopicService {
+    rpc GetConnectNum(GetConnectNumRequest) returns (GetConnectNumResponse){}
+}
+
+message GetConnectNumRequest {
+    string Topic = 1;
+}
+
+message GetConnectNumResponse {
+    int64 Number = 1;
+}
