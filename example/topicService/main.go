@@ -167,42 +167,45 @@ func tcpHandler(conn net.Conn) {
 		if !ok {
 			ConnIndexTable.Store(conn.RemoteAddr().String(), conn)
 		}
-		fmt.Println("new message:", string(a))
-		message := new(socket.TopicEvent)
-		err = json.Unmarshal(a[:l], &message)
-		if err != nil {
-			fmt.Printf("topic message format error:%v\n", err)
-			continue
-		}
-		for _, topic := range message.Topic {
-			if message.Type == socket.PublishKey {
-				value, ok := topicRelevance.Load(topic)
-				if !ok {
-					// topic 没有存在订阅列表中直接过滤
-					continue
-				} else {
-					b, _ := json.Marshal(&socket.PushMessage{
-						Topic: topic,
-						Data:  message.DATA,
-						Type:  message.Type,
-					})
-					table := value.(*list.List)
-					for e := table.Front(); e != nil; e = e.Next() {
-						fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
+		// TODO 要对goroutine数量进行控制
+		go func() {
+			fmt.Println("new message:", string(a))
+			message := new(socket.TopicEvent)
+			err = json.Unmarshal(a[:l], &message)
+			if err != nil {
+				fmt.Printf("topic message format error:%v\n", err)
+				return
+			}
+			for _, topic := range message.Topic {
+				if message.Type == socket.PublishKey {
+					value, ok := topicRelevance.Load(topic)
+					if !ok {
+						// topic 没有存在订阅列表中直接过滤
+						continue
+					} else {
+						b, _ := json.Marshal(&socket.PushMessage{
+							Topic: topic,
+							Data:  message.DATA,
+							Type:  message.Type,
+						})
+						table := value.(*list.List)
+						for e := table.Front(); e != nil; e = e.Next() {
+							fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
 
-						conn, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
-						if ok {
-							_, err = conn.(net.Conn).Write(b)
-							if err != nil {
-								// 直接操作table.Remove 可以改变map中list的值
-								connOffLine(conn.(net.Conn))
-								continue
+							conn, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
+							if ok {
+								_, err = conn.(net.Conn).Write(b)
+								if err != nil {
+									// 直接操作table.Remove 可以改变map中list的值
+									connOffLine(conn.(net.Conn))
+									return
+								}
 							}
 						}
 					}
 				}
 			}
-		}
+		}()
 	}
 
 }

@@ -37,7 +37,6 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(message.Data)
 		// 做发送验证
 		// 判断发送方是否有权限向到达方发送内容
-		message.Data = fmt.Sprintf("{\"type\":\"publish\",\"data\":%s}", message.Data)
 		tower.Publish(message)
 		return true
 	})
