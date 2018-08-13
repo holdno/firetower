@@ -23,7 +23,7 @@ beacontower一定要依赖这个管理节点才能正常工作
 > 详见示例 example/websocketService
 websocket服务是用户基于beacontower自定义开发的业务逻辑
 可以通过beacontower提供的回调方法来实现自己的业务逻辑
-（web client 在 example/web 下)
+（web client 在 example/web 下)  
 目前支持的回调方法：
 - ReadHandler 收到客户端发送的消息时触发
 ``` golang
