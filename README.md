@@ -1,6 +1,14 @@
-# Beacontower
-[![](https://img.shields.io/badge/download-fast-brightgreen.svg)](https://github.com/holdno/beacontower/archive/master.zip) 
-![](https://img.shields.io/badge/build-passing-brightgreen.svg)  
+
+<h1 align="center">Beacontower</h2>
+<p align="center">
+  <a href="https://github.com/holdno/beacontower/archive/master.zip"><img src="https://img.shields.io/badge/download-fast-brightgreen.svg" alt="Downloads"></a>
+  <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build Status">
+  <img src="https://img.shields.io/badge/package%20utilities-dep-blue.svg" alt="Package Utilities">
+  <img src="https://img.shields.io/badge/golang-1.10.0-%23ff69b4.svg" alt="Version">
+  <img src="https://img.shields.io/badge/issue-waiting-red.svg" alt="Issue">
+  <img src="https://img.shields.io/badge/tests-3%20Demo-ff69b4.svg" alt="Demo">
+</p>
+ 
 分布式推送服务  
 基于websocket封装，围绕topic进行sub/pub  
 ## 构成
