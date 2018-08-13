@@ -29,7 +29,6 @@ function beacontower(addr, onopen) {
 
 	this.onmessage = false
 	ws.onmessage = function(event){
-		console.log(event.data)
 		if (event.data == 'heartbeat from beacontower') {
             return 
         }

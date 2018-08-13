@@ -155,7 +155,6 @@ html, body {
 
 	bt.onmessage = function(res){
 		console.log('新消息')
-		console.log(res)
 		var msg = JSON.parse(res.data)
 		if(msg.type == 'onSubscribe' || msg.type == 'onUnsubscribe'){
 			// 更新在线人数
@@ -188,7 +187,8 @@ html, body {
 		}
 		bt.publish(subscribe, {
 			from: user,
-			data: dom.value
+			data: dom.value,
+			type: 'publish'
 		})
 		dom.value = ''
 	}
