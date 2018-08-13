@@ -10,6 +10,7 @@
 </p>
 <h1 align="center">Beacontower</h2>
 分布式推送服务  
+
 基于websocket封装，围绕topic进行sub/pub  
 ## 构成
 
