@@ -1,8 +1,5 @@
-<div align=center>
-Beacontower<br>
+Beacontower
 [![](https://img.shields.io/badge/download-fast-brightgreen.svg)](https://github.com/holdno/beacontower/archive/master.zip)
-
-</div>
 ============
 分布式推送服务
 基于websocket封装，围绕topic进行sub/pub
