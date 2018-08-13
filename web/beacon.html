@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>beacontower client</title>
+	<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0;" name="viewport" />
+</head>
+<style>
+html, body {
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	background-color: #000;
+	margin: 0;
+	padding: 0;
+}
+.box {
+	width: 100%;
+	height: 100%;
+	margin: 0 auto;
+	position: relative;
+	overflow: hidden;
+	padding: 66px 0 30px;
+	box-sizing: border-box;
+}
+.box-message {
+	width: 100%;
+	height: 100%;
+	padding: 15px;
+	box-sizing: border-box;
+	overflow-y: auto;
+}
+.box-bottom {
+	width: 100%;
+	height: 30px;
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	z-index: 999;
+	box-sizing: border-box;
+	padding-right: 50px;
+	padding-left: 15px;
+}
+.box-bottom button {
+	color: #fff;
+	width: 50px;
+	height: 30px;
+	border: none;
+	background: none;
+	position: absolute;
+	right: 0;
+	bottom: 0;
+}
+.box-bottom input {
+	width: 100%;
+	height: 30px;
+	line-height: 30px;
+	border: none;
+	background: none;
+	color: #fff;
+}
+.box-title {
+	width: 100%;
+	height: 50px;
+	line-height: 50px;
+	font-size: 22px;
+	color: #fff;
+	text-align: center;
+	position: absolute;
+	left: 0;
+	top: 0;
+}
+.box-user {
+	width: 100%;
+	height: 16px;
+	line-height: 16px;
+	font-size: 14px;
+	text-align: left;
+	padding-left: 15px;
+	box-sizing: border-box;
+	position: absolute;
+	top: 50px;
+	left: 0;
+	color: #fff;
+}
+.messageline {
+	width: 100%;
+	line-height: 26px;
+	color: #73bf00;
+}
+
+.messageline span {
+	color: #fff;
+}
+</style>
+<body>
+	<div class="box" id="message">
+		<div class="box-title">
+			beacontower
+		</div>
+		<div class="box-user">
+			您的编码:<span id="code"></span>,当前在线:<span id="connected">1</span>
+		</div>
+		<div class="box-message" id="messageshow">
+			
+		</div>
+		<div class="box-bottom">
+			<input value="" placeholder="点击输入信息" id="sendInput"/>
+			<button onclick="send()">send</button>
+		</div>
+	</div>
+	
+</body>
+<script type="text/javascript" src="./beacontower_v0.1.js"></script>
+<script type="text/javascript" >
+	function RndNum(n){
+	    var rnd="";
+	    for(var i=0;i<n;i++)
+	        rnd+=Math.floor(Math.random()*10);
+	    return rnd;
+	}
+	var subscribe = '/chat/world'
+	var user = RndNum(7)
+	document.getElementById('code').innerHTML = user
+
+	var dom = document.getElementById('messageshow')
+	var newMessage = `
+		<div class="messageline">
+			<span class="from">
+				system:
+			</span>
+			连接中...
+		</div>
+	`
+	dom.innerHTML = dom.innerHTML + newMessage
+
+	// var bt = new beacontower("ws://beacontower-conn.ojbk.io/ws", function(){
+	// 	console.log('建立连接')
+	// 	bt.subscribe(subscribe)
+	// })
+	var bt = new beacontower("ws://localhost:9999/ws", function(){
+		console.log('建立连接')
+		bt.subscribe(subscribe)
+		var dom = document.getElementById('messageshow')
+		var newMessage = `
+			<div class="messageline">
+				<span class="from">
+					system:
+				</span>
+				连接成功。欢迎进入基于beacontower构建的聊天室，您可以在底部输入框输入内容并发送，当前在线的用户可以接收到该信息。
+			</div>
+		`
+		dom.innerHTML = dom.innerHTML + newMessage
+	})
+
+	bt.onmessage = function(res){
+		console.log('新消息')
+		console.log(res)
+		var msg = JSON.parse(res.data)
+		if(msg.type == 'onSubscribe' || msg.type == 'onUnsubscribe'){
+			// 更新在线人数
+			document.getElementById('connected').innerHTML = msg.data
+		} else if(msg.type == 'publish'){
+			var dom = document.getElementById('messageshow')
+			var newMessage = `
+				<div class="messageline">
+					<span class="from">
+						`+msg.data.from+`:
+					</span>
+					`+msg.data.data+`
+				</div>
+			`
+			dom.innerHTML = dom.innerHTML + newMessage
+			dom.scrollTop = dom.scrollHeight;
+		}
+		
+	}
+
+	bt.onclose = function(){
+		console.log('连接断开')
+	}
+
+	function send(){
+		var dom = document.getElementById('sendInput')
+		if(dom.value == '') {
+			alert('请输入要发送的内容')
+			return 
+		}
+		bt.publish(subscribe, {
+			from: user,
+			data: dom.value
+		})
+		dom.value = ''
+	}
+</script>
+</html>
