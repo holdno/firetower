@@ -31,7 +31,7 @@ package main
 import (
     "fmt"
     "github.com/gorilla/websocket"
-    "github.com/holdno/beacon/gateway"
+    "github.com/holdno/beacontower/gateway"
     "github.com/holdno/snowFlakeByGo" // 这是一个分布式全局唯一id生成器
     "net/http"
     "strconv"
