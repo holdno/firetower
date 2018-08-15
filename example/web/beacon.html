@@ -138,7 +138,7 @@ html, body {
 	// 	console.log('建立连接')
 	// 	bt.subscribe(subscribe)
 	// })
-	var bt = new beacontower("ws://beacontower-conn.ojbk.io:9999/ws", function(){
+	var bt = new beacontower("ws://localhost:9999/ws", function(){
 		console.log('建立连接')
 		bt.subscribe(subscribe)
 		var dom = document.getElementById('messageshow')

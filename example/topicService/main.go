@@ -176,6 +176,7 @@ func tcpHandler(conn net.Conn) {
 				fmt.Printf("topic message format error:%v\n", err)
 				return
 			}
+			fmt.Println("topic:", message.Topic)
 			for _, topic := range message.Topic {
 				if message.Type == socket.PublishKey {
 					value, ok := topicRelevance.Load(topic)
@@ -188,6 +189,7 @@ func tcpHandler(conn net.Conn) {
 							Data:  message.DATA,
 							Type:  message.Type,
 						})
+						fmt.Println(b)
 						table := value.(*list.List)
 						for e := table.Front(); e != nil; e = e.Next() {
 							fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))

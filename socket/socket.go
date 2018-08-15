@@ -23,14 +23,14 @@ type TcpClient struct {
 }
 
 type TopicEvent struct {
-	Topic []string `json:"topic"`
-	DATA  string   `json:"data"`
-	Type  string   `json:"type"`
+	Topic []string        `json:"topic"`
+	DATA  json.RawMessage `json:"data"`
+	Type  string          `json:"type"`
 }
 
 type PushMessage struct {
 	Topic string `json:"topic"`
-	Data  string `json:"data"`
+	Data  []byte `json:"data"`
 	Type  string `json:"type"`
 }
 
@@ -169,7 +169,7 @@ func (t *TcpClient) DelTopic(topic []string) error {
 	}
 }
 
-func (t *TcpClient) Publish(topic, data string) error {
+func (t *TcpClient) Publish(topic string, data json.RawMessage) error {
 	// 发消息只能发送一条
 	message := &TopicEvent{
 		Topic: []string{topic},
@@ -185,7 +185,7 @@ func (t *TcpClient) Publish(topic, data string) error {
 	}
 }
 
-func (t *TcpClient) OnPush(fn func(t, topic, message string)) {
+func (t *TcpClient) OnPush(fn func(t, topic string, message []byte)) {
 	go func() {
 		for {
 			message, err := t.Read()

@@ -7,7 +7,6 @@ function beacontower(addr, onopen) {
 	this.subscribeKey = 'subscribe'
 	this.unSubscribeKey = 'unSubscribeKey'
 	this.publishKey = 'publish'
-	this.messageSplitKey = '|=|'
 	this.logopen = true // 开启log
 
 	var logInfo = function(data){
@@ -23,15 +22,24 @@ function beacontower(addr, onopen) {
 			logInfo('publish topic:"' + topic + '", data:' + JSON.stringify(data))
 		}
 
-		ws.send([_this.publishKey, topic, JSON.stringify(data)].join(_this.messageSplitKey))
+		ws.send(JSON.stringify({
+            type: _this.publishKey,
+            topic: topic,
+            data: data
+        }))
 		return successMessage('发送成功')
 	}
 
 	this.onmessage = false
 	ws.onmessage = function(event){
+        if (_this.logopen) {
+            logInfo('new message:', event.data)
+        }
+
 		if (event.data == 'heartbeat from beacontower') {
             return 
         }
+
 		if (_this.onmessage) {
 			_this.onmessage(event)
 		}
@@ -53,7 +61,11 @@ function beacontower(addr, onopen) {
 			logInfo('subscribe:"' + topicArr.join(',') + '"')
 		}
 
-		ws.send([_this.subscribeKey, topicArr.join(','), ''].join(_this.messageSplitKey))
+		ws.send(JSON.stringify({
+            type: _this.subscribeKey,
+			topic: topicArr.join(','),
+			data: ''
+        }))
 	}
 
 	this.unsubscribe = function(topicArr){
@@ -65,7 +77,11 @@ function beacontower(addr, onopen) {
 			logInfo('unsubscribe:"' + topicArr.join(',') + '"')
 		}
 
-		ws.send([_this.unSubscribeKey, topicArr.join(','), ''].join(_this.messageSplitKey))
+		ws.send(JSON.stringify({
+            type: _this.unSubscribeKey,
+            topic: topicArr.join(','),
+            data: ''
+        }))
 	}
 
 	function errorMessage(info){

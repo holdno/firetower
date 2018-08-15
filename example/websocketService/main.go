@@ -52,7 +52,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 
 			var pushmsg = new(gateway.TopicMessage)
 			pushmsg.Topic = v
-			pushmsg.Data = fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num)
+			pushmsg.Data = []byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num))
 			tower.Publish(pushmsg)
 		}
 
@@ -63,7 +63,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 			num := tower.GetConnectNum(v)
 			var pushmsg = new(gateway.TopicMessage)
 			pushmsg.Topic = v
-			pushmsg.Data = fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num)
+			pushmsg.Data = []byte(fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num))
 			tower.Publish(pushmsg)
 		}
 

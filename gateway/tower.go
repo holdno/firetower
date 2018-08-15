@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/gorilla/websocket"
 	pb "github.com/holdno/beacon/grpc/topicmanage"
@@ -25,16 +26,16 @@ type FireInfo struct {
 }
 
 type TopicMessage struct {
-	Topic string `json:"topic"`
-	Data  string `json:"data"` // 可能是个json
-	Type  string `json:"type"`
+	Topic string          `json:"topic"`
+	Data  json.RawMessage `json:"data"` // 可能是个json
+	Type  string          `json:"type"`
 }
 
 // 发送的消息结构体
 // 发送不用限制用户消息内容的格式
 type SendMessage struct {
 	MessageType int
-	Data        string
+	Data        []byte
 }
 
 type BeaconTower struct {
@@ -65,7 +66,7 @@ func init() {
 		if err != nil {
 			panic(fmt.Sprintf("[topic manager] can not get local IP, error:%v", err))
 		}
-		topicManage.OnPush(func(t, topic, message string) {
+		topicManage.OnPush(func(t, topic string, message []byte) {
 			fmt.Println("[topic manager] on push", "topic:", string(topic), "data:", message)
 			value, ok := store.TopicTable.Load(topic)
 			if ok {
@@ -257,7 +258,7 @@ func (t *BeaconTower) sendLoop() {
 		case <-heartTicker.C:
 			message := &SendMessage{
 				MessageType: websocket.TextMessage,
-				Data:        ConfigTree.Get("heartbeatContent").(string),
+				Data:        []byte(ConfigTree.Get("heartbeatContent").(string)),
 			}
 			if err := t.Send(message); err != nil {
 				fmt.Println("heartbeat send failed:", err)
@@ -281,21 +282,23 @@ func (t *BeaconTower) readLoop() {
 			goto collapse // 出现问题烽火台直接坍塌
 		}
 		t.LogInfo(fmt.Sprintf("new message:%s", string(data)))
-		msg := strings.Split(string(data), messageSplitKey)
-		if len(msg) != 3 {
-			t.LogError(fmt.Sprintf("客户端消息解析错误:数据格式不正确"))
-			continue
-		}
-		var jsonStruct = new(TopicMessage)
 
-		jsonStruct.Type = msg[0]
-		jsonStruct.Topic = msg[1]
-		jsonStruct.Data = msg[2]
-
-		//if err := json.Unmarshal([]byte(), &jsonStruct); err != nil {
-		//	t.LogError(fmt.Sprintf("客户端消息解析错误:%v", err))
+		//msg := strings.Split(string(data), messageSplitKey)
+		//if len(msg) != 3 {
+		//	t.LogError(fmt.Sprintf("客户端消息解析错误:数据格式不正确"))
 		//	continue
 		//}
+		var jsonStruct = new(TopicMessage)
+
+		//jsonStruct.Type = msg[0]
+		//jsonStruct.Topic = msg[1]
+		//jsonStruct.Data = msg[2]
+
+		if err := json.Unmarshal(data, &jsonStruct); err != nil {
+			t.LogError(fmt.Sprintf("客户端消息解析错误:%v", err))
+			continue
+		}
+
 		message := &FireInfo{
 			MessageType: messageType,
 			Data:        jsonStruct,
