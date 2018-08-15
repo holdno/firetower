@@ -23,13 +23,52 @@ beacontower一定要依赖这个管理节点才能正常工作
 > 详见示例 example/websocketService
 websocket服务是用户基于beacontower自定义开发的业务逻辑
 可以通过beacontower提供的回调方法来实现自己的业务逻辑
-（web client 在 example/web 下)
+（web client 在 example/web 下)  
+### 接入姿势  
+``` golang 
+package main
+
+import (
+    "fmt"
+    "github.com/gorilla/websocket"
+    "github.com/holdno/beacontower/gateway"
+    "github.com/holdno/snowFlakeByGo" // 这是一个分布式全局唯一id生成器
+    "net/http"
+    "strconv"
+)
+
+var upgrader = websocket.Upgrader{
+    CheckOrigin: func(r *http.Request) bool {
+        return true
+    },
+} 
+
+var GlobalIdWorker *snowFlakeByGo.Worker
+
+func main() {
+    GlobalIdWorker, _ = snowFlakeByGo.NewWorker(1) 
+    http.HandleFunc("/ws", Websocket)
+    http.ListenAndServe("0.0.0.0:9999", nil)
+}
+
+func Websocket(w http.ResponseWriter, r *http.Request) {
+    // 做用户身份验证
+    ...
+    // 验证成功才升级连接
+    ws, _ := upgrader.Upgrade(w, r, nil)
+    // 生成一个全局唯一的clientid
+    id := GlobalIdWorker.GetId()
+    tower := gateway.BuildTower(ws, strconv.FormatInt(id, 10)) // 生成一个烽火台
+    tower.Run()
+}
+```
 目前支持的回调方法：
 - ReadHandler 收到客户端发送的消息时触发
 ``` golang
 tower := gateway.BuildTower(ws, strconv.FormatInt(id, 10)) // 创建beacontower实例
 tower.SetReadHandler(func(message *gateway.TopicMessage) bool { // 绑定ReadHandler回调方法
-    fmt.Println(message.Data)
+    // message.Data 为客户端传来的信息
+    // message.Topic 为消息传递的topic
     // 用户可在此做发送验证
     // 判断发送方是否有权限向到达方发送内容
     // 通过 Publish 方法将内容推送到所有订阅 message.Topic 的连接
