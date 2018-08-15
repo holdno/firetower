@@ -33,7 +33,7 @@ function beacontower(addr, onopen) {
 	this.onmessage = false
 	ws.onmessage = function(event){
         if (_this.logopen) {
-            logInfo('new message:', event.data)
+            logInfo('new message:' + JSON.stringify(event.data))
         }
 
 		if (event.data == 'heartbeat from beacontower') {
