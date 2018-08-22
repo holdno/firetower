@@ -24,5 +24,4 @@ func init() {
 	if ConfigTree, err = toml.LoadFile("./beaconTower.toml"); err != nil {
 		fmt.Println("config load failed:", err)
 	}
-
 }

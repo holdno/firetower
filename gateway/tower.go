@@ -36,9 +36,11 @@ type TopicMessage struct {
 type SendMessage struct {
 	MessageType int
 	Data        []byte
+	Topic       string
 }
 
 type BeaconTower struct {
+	connId   uint64
 	ClientId string
 	UserId   string
 	Cookie   []byte
@@ -58,30 +60,29 @@ type BeaconTower struct {
 }
 
 func init() {
+	BuildTopicManage()
+
 	go func() {
+
 	Retry:
-		topicManage = socket.NewClient(ConfigTree.Get("topicServiceAddr").(string))
 		var err error
-		store.IP, err = GetIP()
+		conn, err := grpc.Dial(ConfigTree.Get("grpc.address").(string), grpc.WithInsecure())
+		if err != nil {
+			fmt.Println("[topic manager] grpc connect error:", ConfigTree.Get("topicServiceAddr").(string), err)
+		}
+		TopicManageGrpc = pb.NewTopicServiceClient(conn)
+		topicManage = socket.NewClient(ConfigTree.Get("topicServiceAddr").(string))
+
 		if err != nil {
 			panic(fmt.Sprintf("[topic manager] can not get local IP, error:%v", err))
 		}
 		topicManage.OnPush(func(t, topic string, message []byte) {
 			fmt.Println("[topic manager] on push", "topic:", string(topic), "data:", message)
-			value, ok := store.TopicTable.Load(topic)
-			if ok {
-				conns := value.([]string)
-				for _, v := range conns {
-					conn, ok := store.TowerIndexTable.Load(v)
-					if ok {
-						v, _ := conn.(*BeaconTower)
 
-						v.Send(&SendMessage{
-							websocket.TextMessage,
-							message,
-						})
-					}
-				}
+			TM.centralChan <- &SendMessage{
+				MessageType: 1,
+				Data:        message,
+				Topic:       topic,
 			}
 		})
 		err = topicManage.Connect()
@@ -98,6 +99,7 @@ func init() {
 
 func BuildTower(ws *websocket.Conn, clientId string) (tower *BeaconTower) {
 	tower = &BeaconTower{
+		connId:      getConnId(),
 		ClientId:    clientId,
 		readIn:      make(chan *FireInfo, ConfigTree.Get("chanLens").(int64)),
 		sendOut:     make(chan *SendMessage, ConfigTree.Get("chanLens").(int64)),
@@ -110,14 +112,6 @@ func BuildTower(ws *websocket.Conn, clientId string) (tower *BeaconTower) {
 }
 
 func (t *BeaconTower) Run() {
-	// grpc连接
-	conn, err := grpc.Dial(ConfigTree.Get("grpc.address").(string), grpc.WithInsecure())
-	if err != nil {
-		fmt.Println("[topic manager] grpc connect error:", ConfigTree.Get("topicServiceAddr").(string), err)
-	}
-	defer conn.Close()
-	TopicManageGrpc = pb.NewTopicServiceClient(conn)
-
 	// 读取websocket信息
 	go t.readLoop()
 	// 处理读取事件
@@ -131,7 +125,9 @@ func (t *BeaconTower) BindTopic(topic []string) bool {
 		exist    = 0
 		addTopic []string
 	)
-
+	fmt.Println(TM.bucket)
+	bucket := TM.GetBucket(t)
+	fmt.Println(bucket)
 	for _, v := range topic {
 		for _, vv := range t.Topic {
 			if v == vv {
@@ -144,27 +140,7 @@ func (t *BeaconTower) BindTopic(topic []string) bool {
 		} else {
 			addTopic = append(addTopic, v) // 待订阅的topic
 			t.Topic = append(t.Topic, v)
-			// 先判断当前topic是否存在订阅列表中
-			value, ok := store.TopicTable.Load(v)
-			if ok {
-				valueType := value.([]string)
-				// 验证当前节点是否已经在该topic下 防止重复订阅
-				exist := false
-				for _, v := range valueType {
-					if v == t.ClientId {
-						exist = true
-						break
-					}
-				}
-				if !exist {
-					valueType = append(valueType, t.ClientId)
-					store.TopicTable.Store(v, valueType)
-				}
-			} else {
-				var valueType []string
-				valueType = append(valueType, t.ClientId)
-				store.TopicTable.Store(v, valueType)
-			}
+			bucket.AddSubscribe(v, t)
 		}
 	}
 	if len(addTopic) > 0 {
@@ -183,20 +159,13 @@ func (t *BeaconTower) BindTopic(topic []string) bool {
 
 func (t *BeaconTower) UnbindTopic(topic []string) bool {
 	var delTopic []string // 待取消订阅的topic列表
-
+	bucket := TM.GetBucket(t)
 	for _, v := range topic {
 		for k, vv := range t.Topic {
 			if v == vv { // 如果客户端已经订阅过该topic才执行退订
 				delTopic = append(delTopic, v)
 				t.Topic = append(t.Topic[:k], t.Topic[k+1:]...)
-				value, _ := store.TopicTable.Load(v)
-				valueType := value.([]string)
-				for rk, relevance := range valueType {
-					if relevance == t.ClientId {
-						valueType = append(valueType[:rk], valueType[rk+1:]...)
-						store.TopicTable.Store(v, valueType)
-					}
-				}
+				bucket.DelSubscribe(v, t)
 				break
 			}
 		}
@@ -239,9 +208,9 @@ func (t *BeaconTower) Close() {
 	if !t.isClose {
 		t.isClose = true
 		if t.Topic != nil {
+			fmt.Println("unbindtopic")
 			t.UnbindTopic(t.Topic)
 		}
-		store.TowerIndexTable.Delete(t.ClientId)
 		t.ws.Close()
 		close(t.closeSwitch)
 	}

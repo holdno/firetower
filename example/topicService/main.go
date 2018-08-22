@@ -61,6 +61,7 @@ func (t *topicGrpcService) SubscribeTopic(ctx context.Context, request *pb.Subsc
 	for _, topic := range request.Topic {
 		var store *list.List
 		value, ok := topicRelevance.Load(topic)
+		fmt.Println(request.Ip)
 		if !ok {
 			// topic map 里面维护一个链表
 			store = list.New()
@@ -83,8 +84,10 @@ func (t *topicGrpcService) SubscribeTopic(ctx context.Context, request *pb.Subsc
 
 // topic 取消订阅
 func (t *topicGrpcService) UnSubscribeTopic(ctx context.Context, request *pb.UnSubscribeTopicRequest) (*pb.UnSubscribeTopicResponse, error) {
+	fmt.Println("00000000000-----", request.Ip, "-----00000000000")
 	for _, topic := range request.Topic {
 		value, ok := topicRelevance.Load(topic)
+
 		if !ok {
 			// topic 没有存在订阅列表中直接过滤
 			continue

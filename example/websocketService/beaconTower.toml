@@ -8,3 +8,9 @@ topicServiceAddr = "0.0.0.0:6666"
 
 [grpc]
 address = "localhost:6667"
+
+[bucket]
+Num = 4 # 启动多少个Bucket
+CentralChanCount = 100000 # 整台服务器的消息中心处理通道容量
+BuffChanCount = 1000 # 每个bucket的消息通道容量
+ConsumerNum = 10 # 每个bucket有多少个消费者同时向socket中推送消息
