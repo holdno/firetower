@@ -29,7 +29,7 @@ websocket服务是用户基于beacontower自定义开发的业务逻辑
 可以通过beacontower提供的回调方法来实现自己的业务逻辑  
 （web client 在 example/web 下)  
 ### 架构图  
-<img src="http://img.holdno.com/github/holdno/beacontower_process.png" alt="beacontower">  
+![beacontower](http://img.holdno.com/github/holdno/beacontower_process.png)  
 ### 接入姿势  
 ``` golang 
 package main
