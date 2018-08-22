@@ -7,8 +7,8 @@
   <img src="https://img.shields.io/badge/golang-1.10.0-%23ff69b4.svg" alt="Version">
   <img src="https://img.shields.io/badge/issue-waiting-red.svg" alt="Issue">
 </p>
-<h1 align="center">Beacontower</h2>
-beacontower是一个可分布式部署的推送服务  
+<h1 align="center">Firetower</h2>
+firetower是一个可分布式部署的推送服务  
 
 完全基于websocket封装，围绕topic进行sub/pub    
 自身实现订阅管理服务，无需依赖redis  
@@ -20,16 +20,16 @@ beacontower是一个可分布式部署的推送服务
 > 详见示例 example/topicService  
 
 该服务主要作为集群环境下唯一的topic管理节点  
-beacontower一定要依赖这个管理节点才能正常工作  
+firetower一定要依赖这个管理节点才能正常工作  
 大型项目可以将该服务单独部署在一台独立的服务器上，小项目可以同连接层服务一起部署在一台机器上  
 - 连接层服务(websocket服务)  
 > 详见示例 example/websocketService  
 
-websocket服务是用户基于beacontower自定义开发的业务逻辑  
-可以通过beacontower提供的回调方法来实现自己的业务逻辑  
+websocket服务是用户基于firetower自定义开发的业务逻辑  
+可以通过firetower提供的回调方法来实现自己的业务逻辑  
 （web client 在 example/web 下)  
 ### 架构图  
-![beacontower](http://img.holdno.com/github/holdno/beacontower_process.png)  
+![beacontower](http://img.holdno.com/github/holdno/firetower_process.png)  
 ### 接入姿势  
 ``` golang 
 package main
@@ -37,7 +37,7 @@ package main
 import (
     "fmt"
     "github.com/gorilla/websocket"
-    "github.com/holdno/beacontower/gateway"
+    "github.com/holdno/firetower/gateway"
     "github.com/holdno/snowFlakeByGo" // 这是一个分布式全局唯一id生成器
     "net/http"
     "strconv"
