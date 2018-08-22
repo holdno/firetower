@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/gorilla/websocket"
-	"github.com/holdno/beacontower/gateway"
+	"github.com/holdno/firetower/gateway"
 	"github.com/holdno/snowFlakeByGo"
 	"net/http"
 	"strconv"
