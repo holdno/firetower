@@ -1,4 +1,4 @@
-function beacontower(addr, onopen) {
+function firetower(addr, onopen) {
 	var ws = new WebSocket(addr);
 	ws.onopen = onopen
 
@@ -10,7 +10,7 @@ function beacontower(addr, onopen) {
 	this.logopen = true // 开启log
 
 	var logInfo = function(data){
-		console.log('[beacontower] INFO', data)
+		console.log('[firetower] INFO', data)
 	}
 
 	this.publish = function(topic, data){
@@ -36,7 +36,7 @@ function beacontower(addr, onopen) {
             logInfo('new message:' + JSON.stringify(event.data))
         }
 
-		if (event.data == 'heartbeat from beacontower') {
+		if (event.data == 'heartbeat from firetower') {
             return 
         }
 

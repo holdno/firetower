@@ -323,7 +323,7 @@ func (t *FireTower) readDispose() {
 	}
 }
 
-//func (t *BeaconTower) Event(event, topic, message string) {
+//func (t *FireTower) Event(event, topic, message string) {
 //	switch event {
 //	case socket.SubKey:
 //		if t.subscribeHandler != nil {

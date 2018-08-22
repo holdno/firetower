@@ -22,8 +22,8 @@ type TowerManager struct {
 type Bucket struct {
 	mu             sync.RWMutex // 读写锁，可并发读不可并发读写
 	id             int64
-	topicRelevance map[string]map[string]*BeaconTower // topic -> websocket clientid -> websocket conn
-	BuffChan       chan *SendMessage                  // bucket的消息处理队列
+	topicRelevance map[string]map[string]*FireTower // topic -> websocket clientid -> websocket conn
+	BuffChan       chan *SendMessage                // bucket的消息处理队列
 }
 
 func BuildTopicManage() {
@@ -53,7 +53,7 @@ func BuildTopicManage() {
 func newBucket() *Bucket {
 	b := &Bucket{
 		id:             getNewBucketId(),
-		topicRelevance: make(map[string]map[string]*BeaconTower),
+		topicRelevance: make(map[string]map[string]*FireTower),
 		BuffChan:       make(chan *SendMessage, ConfigTree.Get("bucket.BuffChanCount").(int64)),
 	}
 
@@ -83,7 +83,7 @@ func getConnId() uint64 {
 	return connId
 }
 
-func (t *TowerManager) GetBucket(bt *BeaconTower) (bucket *Bucket) {
+func (t *TowerManager) GetBucket(bt *FireTower) (bucket *Bucket) {
 	bucket = t.bucket[bt.connId%uint64(len(t.bucket))]
 	return
 }
@@ -97,18 +97,18 @@ func (b *Bucket) consumer() {
 	}
 }
 
-func (b *Bucket) AddSubscribe(topic string, bt *BeaconTower) {
+func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
 	b.mu.Lock()
 	if m, ok := b.topicRelevance[topic]; ok {
 		m[bt.ClientId] = bt
 	} else {
-		b.topicRelevance[topic] = make(map[string]*BeaconTower)
+		b.topicRelevance[topic] = make(map[string]*FireTower)
 		b.topicRelevance[topic][bt.ClientId] = bt
 	}
 	b.mu.Unlock()
 }
 
-func (b *Bucket) DelSubscribe(topic string, bt *BeaconTower) {
+func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 	b.mu.Lock()
 	if m, ok := b.topicRelevance[topic]; ok {
 		delete(m, bt.ClientId)

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
-	<title>beacontower client</title>
+	<title>firetower client</title>
 	<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0;" name="viewport" />
 </head>
 <style>
@@ -100,7 +100,7 @@ input, button {
 <body>
 	<div class="box" id="message">
 		<div class="box-title">
-			beacontower
+			firetower
 		</div>
 		<div class="box-user">
 			您的编码:<span id="code"></span>,当前在线:<span id="connected">1</span>
@@ -115,7 +115,7 @@ input, button {
 	</div>
 	
 </body>
-<script type="text/javascript" src="./beacontower_v0.1.js"></script>
+<script type="text/javascript" src="firetower_v0.1.js"></script>
 <script type="text/javascript" >
 	function RndNum(n){
 	    var rnd="";
@@ -138,11 +138,11 @@ input, button {
 	`
 	dom.innerHTML = dom.innerHTML + newMessage
 
-	// var bt = new beacontower("ws://beacontower-conn.ojbk.io/ws", function(){
+	// var bt = new firetower("ws://firetower-conn.ojbk.io/ws", function(){
 	// 	console.log('建立连接')
 	// 	bt.subscribe(subscribe)
 	// })
-	var bt = new beacontower("ws://localhost:9999/ws", function(){
+	var bt = new firetower("ws://localhost:9999/ws", function(){
 		console.log('建立连接')
 		bt.subscribe(subscribe)
 		var dom = document.getElementById('messageshow')
@@ -151,7 +151,7 @@ input, button {
 				<span class="from">
 					system:
 				</span>
-				连接成功。欢迎进入基于beacontower构建的聊天室，您可以在底部输入框输入内容并发送，当前在线的用户可以接收到该信息。
+				连接成功。欢迎进入基于firetower构建的聊天室，您可以在底部输入框输入内容并发送，当前在线的用户可以接收到该信息。
 			</div>
 		`
 		dom.innerHTML = dom.innerHTML + newMessage
