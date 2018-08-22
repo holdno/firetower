@@ -98,7 +98,7 @@ tower.SetSubscribeHandler(func(topic []string) bool {
 
         var pushmsg = new(gateway.TopicMessage)
         pushmsg.Topic = v
-        pushmsg.Data = fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num)
+        pushmsg.Data = []byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num))
         tower.Publish(pushmsg)
     }
     return true // 返回true则进行正常流程 false则终止
@@ -113,11 +113,14 @@ tower.SetUnSubscribeHandler(func(topic []string) bool {
         num := tower.GetConnectNum(v)
         var pushmsg = new(gateway.TopicMessage)
         pushmsg.Topic = v
-        pushmsg.Data = fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num)
+        pushmsg.Data = []byte(fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num))
         tower.Publish(pushmsg)
     }
 
     return true
 })
 ```
-注意：当客户端断开websocket连接时beacontower会将其在线时订阅的所有topic进行退订 会触发UnSubscirbeHandler
+注意：当客户端断开websocket连接时beacontower会将其在线时订阅的所有topic进行退订 会触发UnSubscirbeHandler  
+
+## TODO
+小包合并大包，减少发送频率    
