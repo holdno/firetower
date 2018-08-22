@@ -15,8 +15,8 @@ beacontower是一个可分布式部署的推送服务
 聊天室demo体验地址: http://chat.ojbk.io  
 ### 构成
 
-基本服务由两点构成
-- topic管理服务
+基本服务由两点构成  
+- topic管理服务  
 > 详见示例 example/topicService  
 
 该服务主要作为集群环境下唯一的topic管理节点  
@@ -28,6 +28,8 @@ beacontower一定要依赖这个管理节点才能正常工作
 websocket服务是用户基于beacontower自定义开发的业务逻辑  
 可以通过beacontower提供的回调方法来实现自己的业务逻辑  
 （web client 在 example/web 下)  
+### 架构图  
+<img src="http://img.holdno.com/github/holdno/beacontower_process.png" alt="beacontower">  
 ### 接入姿势  
 ``` golang 
 package main
