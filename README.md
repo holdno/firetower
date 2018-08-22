@@ -8,10 +8,11 @@
   <img src="https://img.shields.io/badge/issue-waiting-red.svg" alt="Issue">
 </p>
 <h1 align="center">Beacontower</h2>
-分布式推送服务  
+beacontower是一个可分布式部署的推送服务  
 
-基于websocket封装，围绕topic进行sub/pub    
-体验地址: http://chat.ojbk.io  
+完全基于websocket封装，围绕topic进行sub/pub    
+自身实现订阅管理服务，无需依赖redis  
+聊天室demo体验地址: http://chat.ojbk.io  
 ### 构成
 
 基本服务由两点构成
