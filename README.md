@@ -21,7 +21,8 @@ beacontower是一个可分布式部署的推送服务
 
 该服务主要作为集群环境下唯一的topic管理节点  
 beacontower一定要依赖这个管理节点才能正常工作  
-- websocket服务  
+大型项目可以将该服务单独部署在一台独立的服务器上，小项目可以同连接层服务一起部署在一台机器上  
+- 连接层服务(websocket服务)  
 > 详见示例 example/websocketService  
 
 websocket服务是用户基于beacontower自定义开发的业务逻辑  
