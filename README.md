@@ -68,7 +68,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
     tower.Run()
 }
 ```
-目前支持的回调方法：
+### 目前支持的回调方法
 - ReadHandler 收到客户端发送的消息时触发
 ``` golang
 tower := gateway.BuildTower(ws, strconv.FormatInt(id, 10)) // 创建beacontower实例
