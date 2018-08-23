@@ -40,10 +40,10 @@ type SendMessage struct {
 }
 
 type FireTower struct {
-	connId   uint64
-	ClientId string
-	UserId   string
-	Cookie   []byte
+	connId   uint64 // 连接id 每台服务器上该id从1开始自增
+	ClientId string // 客户端id 用来做业务逻辑
+	UserId   string // 一般业务中每个连接都是一个用户 用来给业务提供用户识别
+	Cookie   []byte // 这里提供给业务放一个存放跟当前连接相关的数据信息
 
 	readIn      chan *FireInfo    // 读取队列
 	sendOut     chan *SendMessage // 发送队列
@@ -60,7 +60,8 @@ type FireTower struct {
 }
 
 func init() {
-	BuildTopicManage()
+	loadConfig()       // 加载配置
+	BuildTopicManage() // 构建服务架构
 
 	go func() {
 
@@ -125,9 +126,7 @@ func (t *FireTower) BindTopic(topic []string) bool {
 		exist    = 0
 		addTopic []string
 	)
-	fmt.Println(TM.bucket)
 	bucket := TM.GetBucket(t)
-	fmt.Println(bucket)
 	for _, v := range topic {
 		for _, vv := range t.Topic {
 			if v == vv {

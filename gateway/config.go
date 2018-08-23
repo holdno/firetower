@@ -17,7 +17,7 @@ var (
 	ConfigTree *toml.Tree
 )
 
-func init() {
+func loadConfig() {
 	var (
 		err error
 	)
