@@ -36,7 +36,7 @@ function firetower(addr, onopen) {
             logInfo('new message:' + JSON.stringify(event.data))
         }
 
-		if (event.data == 'heartbeat from firetower') {
+		if (event.data == 'heartbeat') {
             return 
         }
 

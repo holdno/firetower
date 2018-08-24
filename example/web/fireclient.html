@@ -158,7 +158,6 @@ input, button {
 	})
 
 	bt.onmessage = function(res){
-		console.log('新消息')
 		var msg = JSON.parse(res.data)
 		if(msg.type == 'onSubscribe' || msg.type == 'onUnsubscribe'){
 			// 更新在线人数

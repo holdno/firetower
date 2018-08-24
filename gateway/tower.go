@@ -7,7 +7,6 @@ import (
 	"github.com/gorilla/websocket"
 	pb "github.com/holdno/firetower/grpc/topicmanage"
 	"github.com/holdno/firetower/socket"
-	"github.com/holdno/firetower/store"
 	"google.golang.org/grpc"
 	"strings"
 	"sync"
@@ -108,11 +107,11 @@ func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
 		isClose:     false,
 		closeSwitch: make(chan struct{}),
 	}
-	store.TowerIndexTable.Store(clientId, tower)
 	return
 }
 
 func (t *FireTower) Run() {
+	t.LogInfo(fmt.Sprintf("new websocket running, ConnId:%d ClientId:%s", t.connId, t.ClientId))
 	// 读取websocket信息
 	go t.readLoop()
 	// 处理读取事件
@@ -201,7 +200,6 @@ func (t *FireTower) Send(message *SendMessage) error {
 
 func (t *FireTower) Close() {
 	t.LogInfo("websocket connect is closed")
-	t.ws.Close()
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if !t.isClose {
@@ -226,7 +224,7 @@ func (t *FireTower) sendLoop() {
 		case <-heartTicker.C:
 			message := &SendMessage{
 				MessageType: websocket.TextMessage,
-				Data:        []byte(ConfigTree.Get("heartbeatContent").(string)),
+				Data:        []byte("heartbeat"),
 			}
 			if err := t.Send(message); err != nil {
 				fmt.Println("heartbeat send failed:", err)
@@ -279,7 +277,8 @@ func (t *FireTower) readDispose() {
 		message, err := t.read()
 		if err != nil {
 			t.LogError(fmt.Sprintf("read message failed:%v", err))
-			continue
+			t.Close()
+			return
 		}
 		if err == nil {
 			switch message.Data.Type {
@@ -335,8 +334,19 @@ func (t *FireTower) readDispose() {
 //	}
 //}
 
-func (t *FireTower) Publish(message *TopicMessage) {
-	topicManage.Publish(message.Topic, message.Data)
+func (t *FireTower) Publish(message *TopicMessage) bool {
+	// topicManage.Publish(message.Topic, message.Data)
+	res, err := TopicManageGrpc.Publish(context.Background(), &pb.PublishRequest{
+		Topic: message.Topic,
+		Data:  message.Data,
+	})
+	if err != nil {
+		t.LogError(fmt.Sprintf("Publish Error, Topic:%s,Data:%s; error:%v", message.Topic, string(message.Data), err))
+		return false
+	} else {
+		// TODO 发送失败
+		return res.Ok
+	}
 }
 
 // 接收到用户publish的消息时触发

@@ -34,7 +34,6 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	tower := gateway.BuildTower(ws, strconv.FormatInt(id, 10))
 
 	tower.SetReadHandler(func(message *gateway.TopicMessage) bool {
-		fmt.Println(message.Data)
 		// 做发送验证
 		// 判断发送方是否有权限向到达方发送内容
 		tower.Publish(message)
@@ -69,6 +68,5 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 
 		return true
 	})
-	fmt.Println("new websocket running")
 	tower.Run()
 }

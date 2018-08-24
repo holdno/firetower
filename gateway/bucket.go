@@ -119,6 +119,7 @@ func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 	b.mu.Unlock()
 }
 
+// 桶内进行遍历push
 func (b *Bucket) Push(message *SendMessage) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()

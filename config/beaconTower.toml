@@ -2,7 +2,6 @@
 
 chanLens = 1000 # channal 缓冲区大小
 heartbeat = 600 # 心跳间隔 单位秒(s)
-heartbeatContent = "heartbeat from firetower" # 心跳包发送的内容
 
 topicServiceAddr = "0.0.0.0:6666"
 
@@ -13,4 +12,4 @@ address = "localhost:6667"
 Num = 4 # 启动多少个Bucket
 CentralChanCount = 100000 # 整台服务器的消息中心处理通道容量
 BuffChanCount = 1000 # 每个bucket的消息通道容量
-ConsumerNum = 10 # 每个bucket有多少个消费者同时向socket中推送消息
+ConsumerNum = 32 # 每个bucket有多少个消费者同时向socket中推送消息

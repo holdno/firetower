@@ -5,9 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	pb "github.com/holdno/beacontower/grpc/topicmanage"
-	"github.com/holdno/beacontower/socket"
+	pb "github.com/holdno/firetower/grpc/topicmanage"
+	"github.com/holdno/firetower/socket"
 	"github.com/pelletier/go-toml"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"net"
 	"sync"
@@ -41,7 +42,44 @@ func main() {
 	tcpConnect()
 }
 
-type topicGrpcService struct{}
+type topicGrpcService struct {
+	mu sync.RWMutex
+}
+
+// Publish
+func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishRequest) (*pb.PublishResponse, error) {
+	fmt.Println("new message:", string(request.Data))
+
+	value, ok := topicRelevance.Load(request.Topic)
+	if !ok {
+		// topic 没有存在订阅列表中直接过滤
+		return &pb.PublishResponse{Ok: false}, errors.New("topic not exist")
+	} else {
+		b, _ := json.Marshal(&socket.PushMessage{
+			Topic: request.Topic,
+			Data:  request.Data,
+			Type:  "push",
+		})
+		table := value.(*list.List)
+		t.mu.Lock()
+		for e := table.Front(); e != nil; e = e.Next() {
+			fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
+
+			conn, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
+			if ok {
+				fmt.Println("到这里了")
+				_, err := conn.(net.Conn).Write(b)
+				if err != nil {
+					// 直接操作table.Remove 可以改变map中list的值
+					connOffLine(conn.(net.Conn))
+				}
+			}
+		}
+		t.mu.Unlock()
+	}
+
+	return &pb.PublishResponse{Ok: true}, nil
+}
 
 // 获取topic订阅数
 func (t *topicGrpcService) GetConnectNum(ctx context.Context, request *pb.GetConnectNumRequest) (*pb.GetConnectNumResponse, error) {
@@ -84,7 +122,6 @@ func (t *topicGrpcService) SubscribeTopic(ctx context.Context, request *pb.Subsc
 
 // topic 取消订阅
 func (t *topicGrpcService) UnSubscribeTopic(ctx context.Context, request *pb.UnSubscribeTopicRequest) (*pb.UnSubscribeTopicResponse, error) {
-	fmt.Println("00000000000-----", request.Ip, "-----00000000000")
 	for _, topic := range request.Topic {
 		value, ok := topicRelevance.Load(topic)
 
@@ -136,7 +173,13 @@ func tcpConnect() {
 			continue
 		}
 		fmt.Println("new socket connect")
-		go tcpHandler(conn)
+		// 维护一个IP->连接关系的索引map
+		_, ok := ConnIndexTable.Load(conn.RemoteAddr().String())
+		if !ok {
+			fmt.Println("保存连接：", conn.RemoteAddr().String())
+			ConnIndexTable.Store(conn.RemoteAddr().String(), conn)
+		}
+		// go tcpHandler(conn)
 		go heartbeat(conn)
 	}
 }
@@ -160,7 +203,7 @@ func connOffLine(conn net.Conn) {
 func tcpHandler(conn net.Conn) {
 	for {
 		var a = make([]byte, 1024)
-		l, err := conn.Read(a)
+		_, err := conn.Read(a)
 		if err != nil {
 			connOffLine(conn)
 			return
@@ -168,47 +211,48 @@ func tcpHandler(conn net.Conn) {
 		// 维护一个IP->连接关系的索引map
 		_, ok := ConnIndexTable.Load(conn.RemoteAddr().String())
 		if !ok {
+			fmt.Println("保存连接：", conn.RemoteAddr().String())
 			ConnIndexTable.Store(conn.RemoteAddr().String(), conn)
 		}
 		// TODO 要对goroutine数量进行控制
-		go func() {
-			fmt.Println("new message:", string(a))
-			message := new(socket.TopicEvent)
-			err = json.Unmarshal(a[:l], &message)
-			if err != nil {
-				fmt.Printf("topic message format error:%v\n", err)
-				return
-			}
-			for _, topic := range message.Topic {
-				if message.Type == socket.PublishKey {
-					value, ok := topicRelevance.Load(topic)
-					if !ok {
-						// topic 没有存在订阅列表中直接过滤
-						continue
-					} else {
-						b, _ := json.Marshal(&socket.PushMessage{
-							Topic: topic,
-							Data:  message.DATA,
-							Type:  message.Type,
-						})
-						table := value.(*list.List)
-						for e := table.Front(); e != nil; e = e.Next() {
-							fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
-
-							conn, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
-							if ok {
-								_, err = conn.(net.Conn).Write(b)
-								if err != nil {
-									// 直接操作table.Remove 可以改变map中list的值
-									connOffLine(conn.(net.Conn))
-									return
-								}
-							}
-						}
-					}
-				}
-			}
-		}()
+		//go func() {
+		//	fmt.Println("new message:", string(a))
+		//	message := new(socket.TopicEvent)
+		//	err = json.Unmarshal(a[:l], &message)
+		//	if err != nil {
+		//		fmt.Printf("topic message format error:%v\n", err)
+		//		return
+		//	}
+		//	for _, topic := range message.Topic {
+		//		if message.Type == socket.PublishKey {
+		//			value, ok := topicRelevance.Load(topic)
+		//			if !ok {
+		//				// topic 没有存在订阅列表中直接过滤
+		//				continue
+		//			} else {
+		//				b, _ := json.Marshal(&socket.PushMessage{
+		//					Topic: topic,
+		//					Data:  message.DATA,
+		//					Type:  message.Type,
+		//				})
+		//				table := value.(*list.List)
+		//				for e := table.Front(); e != nil; e = e.Next() {
+		//					fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
+		//
+		//					conn, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
+		//					if ok {
+		//						_, err = conn.(net.Conn).Write(b)
+		//						if err != nil {
+		//							// 直接操作table.Remove 可以改变map中list的值
+		//							connOffLine(conn.(net.Conn))
+		//							return
+		//						}
+		//					}
+		//				}
+		//			}
+		//		}
+		//	}
+		//}()
 	}
 
 }

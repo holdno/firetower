@@ -34,7 +34,7 @@ func (m *GetConnectNumRequest) Reset()         { *m = GetConnectNumRequest{} }
 func (m *GetConnectNumRequest) String() string { return proto.CompactTextString(m) }
 func (*GetConnectNumRequest) ProtoMessage()    {}
 func (*GetConnectNumRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_topicmanage_735074bd46b52921, []int{0}
+	return fileDescriptor_topicmanage_c9d4a958c1b553ac, []int{0}
 }
 func (m *GetConnectNumRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_GetConnectNumRequest.Unmarshal(m, b)
@@ -72,7 +72,7 @@ func (m *GetConnectNumResponse) Reset()         { *m = GetConnectNumResponse{} }
 func (m *GetConnectNumResponse) String() string { return proto.CompactTextString(m) }
 func (*GetConnectNumResponse) ProtoMessage()    {}
 func (*GetConnectNumResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_topicmanage_735074bd46b52921, []int{1}
+	return fileDescriptor_topicmanage_c9d4a958c1b553ac, []int{1}
 }
 func (m *GetConnectNumResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_GetConnectNumResponse.Unmarshal(m, b)
@@ -111,7 +111,7 @@ func (m *SubscribeTopicRequest) Reset()         { *m = SubscribeTopicRequest{} }
 func (m *SubscribeTopicRequest) String() string { return proto.CompactTextString(m) }
 func (*SubscribeTopicRequest) ProtoMessage()    {}
 func (*SubscribeTopicRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_topicmanage_735074bd46b52921, []int{2}
+	return fileDescriptor_topicmanage_c9d4a958c1b553ac, []int{2}
 }
 func (m *SubscribeTopicRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SubscribeTopicRequest.Unmarshal(m, b)
@@ -155,7 +155,7 @@ func (m *SubscribeTopicResponse) Reset()         { *m = SubscribeTopicResponse{}
 func (m *SubscribeTopicResponse) String() string { return proto.CompactTextString(m) }
 func (*SubscribeTopicResponse) ProtoMessage()    {}
 func (*SubscribeTopicResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_topicmanage_735074bd46b52921, []int{3}
+	return fileDescriptor_topicmanage_c9d4a958c1b553ac, []int{3}
 }
 func (m *SubscribeTopicResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SubscribeTopicResponse.Unmarshal(m, b)
@@ -187,7 +187,7 @@ func (m *UnSubscribeTopicRequest) Reset()         { *m = UnSubscribeTopicRequest
 func (m *UnSubscribeTopicRequest) String() string { return proto.CompactTextString(m) }
 func (*UnSubscribeTopicRequest) ProtoMessage()    {}
 func (*UnSubscribeTopicRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_topicmanage_735074bd46b52921, []int{4}
+	return fileDescriptor_topicmanage_c9d4a958c1b553ac, []int{4}
 }
 func (m *UnSubscribeTopicRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_UnSubscribeTopicRequest.Unmarshal(m, b)
@@ -231,7 +231,7 @@ func (m *UnSubscribeTopicResponse) Reset()         { *m = UnSubscribeTopicRespon
 func (m *UnSubscribeTopicResponse) String() string { return proto.CompactTextString(m) }
 func (*UnSubscribeTopicResponse) ProtoMessage()    {}
 func (*UnSubscribeTopicResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_topicmanage_735074bd46b52921, []int{5}
+	return fileDescriptor_topicmanage_c9d4a958c1b553ac, []int{5}
 }
 func (m *UnSubscribeTopicResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_UnSubscribeTopicResponse.Unmarshal(m, b)
@@ -251,6 +251,90 @@ func (m *UnSubscribeTopicResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_UnSubscribeTopicResponse proto.InternalMessageInfo
 
+type PublishRequest struct {
+	Topic                string   `protobuf:"bytes,1,opt,name=Topic,proto3" json:"Topic,omitempty"`
+	Data                 []byte   `protobuf:"bytes,2,opt,name=Data,proto3" json:"Data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PublishRequest) Reset()         { *m = PublishRequest{} }
+func (m *PublishRequest) String() string { return proto.CompactTextString(m) }
+func (*PublishRequest) ProtoMessage()    {}
+func (*PublishRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_topicmanage_c9d4a958c1b553ac, []int{6}
+}
+func (m *PublishRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_PublishRequest.Unmarshal(m, b)
+}
+func (m *PublishRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_PublishRequest.Marshal(b, m, deterministic)
+}
+func (dst *PublishRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PublishRequest.Merge(dst, src)
+}
+func (m *PublishRequest) XXX_Size() int {
+	return xxx_messageInfo_PublishRequest.Size(m)
+}
+func (m *PublishRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PublishRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PublishRequest proto.InternalMessageInfo
+
+func (m *PublishRequest) GetTopic() string {
+	if m != nil {
+		return m.Topic
+	}
+	return ""
+}
+
+func (m *PublishRequest) GetData() []byte {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+type PublishResponse struct {
+	Ok                   bool     `protobuf:"varint,1,opt,name=Ok,proto3" json:"Ok,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PublishResponse) Reset()         { *m = PublishResponse{} }
+func (m *PublishResponse) String() string { return proto.CompactTextString(m) }
+func (*PublishResponse) ProtoMessage()    {}
+func (*PublishResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_topicmanage_c9d4a958c1b553ac, []int{7}
+}
+func (m *PublishResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_PublishResponse.Unmarshal(m, b)
+}
+func (m *PublishResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_PublishResponse.Marshal(b, m, deterministic)
+}
+func (dst *PublishResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PublishResponse.Merge(dst, src)
+}
+func (m *PublishResponse) XXX_Size() int {
+	return xxx_messageInfo_PublishResponse.Size(m)
+}
+func (m *PublishResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_PublishResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PublishResponse proto.InternalMessageInfo
+
+func (m *PublishResponse) GetOk() bool {
+	if m != nil {
+		return m.Ok
+	}
+	return false
+}
+
 func init() {
 	proto.RegisterType((*GetConnectNumRequest)(nil), "topicproto.GetConnectNumRequest")
 	proto.RegisterType((*GetConnectNumResponse)(nil), "topicproto.GetConnectNumResponse")
@@ -258,6 +342,8 @@ func init() {
 	proto.RegisterType((*SubscribeTopicResponse)(nil), "topicproto.SubscribeTopicResponse")
 	proto.RegisterType((*UnSubscribeTopicRequest)(nil), "topicproto.UnSubscribeTopicRequest")
 	proto.RegisterType((*UnSubscribeTopicResponse)(nil), "topicproto.UnSubscribeTopicResponse")
+	proto.RegisterType((*PublishRequest)(nil), "topicproto.PublishRequest")
+	proto.RegisterType((*PublishResponse)(nil), "topicproto.PublishResponse")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -275,6 +361,7 @@ type TopicServiceClient interface {
 	GetConnectNum(ctx context.Context, in *GetConnectNumRequest, opts ...grpc.CallOption) (*GetConnectNumResponse, error)
 	SubscribeTopic(ctx context.Context, in *SubscribeTopicRequest, opts ...grpc.CallOption) (*SubscribeTopicResponse, error)
 	UnSubscribeTopic(ctx context.Context, in *UnSubscribeTopicRequest, opts ...grpc.CallOption) (*UnSubscribeTopicResponse, error)
+	Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error)
 }
 
 type topicServiceClient struct {
@@ -312,11 +399,21 @@ func (c *topicServiceClient) UnSubscribeTopic(ctx context.Context, in *UnSubscri
 	return out, nil
 }
 
+func (c *topicServiceClient) Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error) {
+	out := new(PublishResponse)
+	err := c.cc.Invoke(ctx, "/topicproto.TopicService/Publish", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TopicServiceServer is the server API for TopicService service.
 type TopicServiceServer interface {
 	GetConnectNum(context.Context, *GetConnectNumRequest) (*GetConnectNumResponse, error)
 	SubscribeTopic(context.Context, *SubscribeTopicRequest) (*SubscribeTopicResponse, error)
 	UnSubscribeTopic(context.Context, *UnSubscribeTopicRequest) (*UnSubscribeTopicResponse, error)
+	Publish(context.Context, *PublishRequest) (*PublishResponse, error)
 }
 
 func RegisterTopicServiceServer(s *grpc.Server, srv TopicServiceServer) {
@@ -377,6 +474,24 @@ func _TopicService_UnSubscribeTopic_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TopicService_Publish_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PublishRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TopicServiceServer).Publish(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/topicproto.TopicService/Publish",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TopicServiceServer).Publish(ctx, req.(*PublishRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _TopicService_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "topicproto.TopicService",
 	HandlerType: (*TopicServiceServer)(nil),
@@ -393,29 +508,37 @@ var _TopicService_serviceDesc = grpc.ServiceDesc{
 			MethodName: "UnSubscribeTopic",
 			Handler:    _TopicService_UnSubscribeTopic_Handler,
 		},
+		{
+			MethodName: "Publish",
+			Handler:    _TopicService_Publish_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "topicmanage.proto",
 }
 
-func init() { proto.RegisterFile("topicmanage.proto", fileDescriptor_topicmanage_735074bd46b52921) }
+func init() { proto.RegisterFile("topicmanage.proto", fileDescriptor_topicmanage_c9d4a958c1b553ac) }
 
-var fileDescriptor_topicmanage_735074bd46b52921 = []byte{
-	// 253 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x12, 0x2c, 0xc9, 0x2f, 0xc8,
-	0x4c, 0xce, 0x4d, 0xcc, 0x4b, 0x4c, 0x4f, 0xd5, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x02,
-	0x0b, 0x81, 0xd9, 0x4a, 0x3a, 0x5c, 0x22, 0xee, 0xa9, 0x25, 0xce, 0xf9, 0x79, 0x79, 0xa9, 0xc9,
-	0x25, 0x7e, 0xa5, 0xb9, 0x41, 0xa9, 0x85, 0xa5, 0xa9, 0xc5, 0x25, 0x42, 0x22, 0x5c, 0xac, 0x21,
-	0x20, 0x55, 0x12, 0x8c, 0x0a, 0x8c, 0x1a, 0x9c, 0x41, 0x10, 0x8e, 0x92, 0x3e, 0x97, 0x28, 0x9a,
-	0xea, 0xe2, 0x82, 0xfc, 0xbc, 0xe2, 0x54, 0x21, 0x31, 0x2e, 0x36, 0xbf, 0xd2, 0xdc, 0xa4, 0xd4,
-	0x22, 0xb0, 0x7a, 0xe6, 0x20, 0x28, 0x4f, 0xc9, 0x96, 0x4b, 0x34, 0xb8, 0x34, 0xa9, 0x38, 0xb9,
-	0x28, 0x33, 0x29, 0x15, 0x6c, 0x04, 0x16, 0xf3, 0x99, 0xe1, 0xe6, 0x0b, 0xf1, 0x71, 0x31, 0x79,
-	0x16, 0x48, 0x30, 0x81, 0xad, 0x64, 0xf2, 0x2c, 0x50, 0x92, 0xe0, 0x12, 0x43, 0xd7, 0x0e, 0xb1,
-	0x50, 0xc9, 0x9e, 0x4b, 0x3c, 0x34, 0x8f, 0x12, 0xa3, 0xa5, 0xb8, 0x24, 0x30, 0x0d, 0x80, 0x18,
-	0x6e, 0xb4, 0x88, 0x89, 0x8b, 0x07, 0x2c, 0x12, 0x9c, 0x5a, 0x54, 0x96, 0x99, 0x9c, 0x2a, 0x14,
-	0xc6, 0xc5, 0x8b, 0xe2, 0x6f, 0x21, 0x05, 0x3d, 0x44, 0x18, 0xea, 0x61, 0x0b, 0x40, 0x29, 0x45,
-	0x3c, 0x2a, 0xa0, 0x7e, 0x60, 0x10, 0x8a, 0xe4, 0xe2, 0x43, 0x75, 0x82, 0x10, 0x8a, 0x36, 0xac,
-	0xfe, 0x93, 0x52, 0xc2, 0xa7, 0x04, 0x6e, 0x74, 0x3c, 0x97, 0x00, 0xba, 0xff, 0x84, 0x94, 0x91,
-	0x75, 0xe2, 0x08, 0x3e, 0x29, 0x15, 0xfc, 0x8a, 0x60, 0x16, 0x24, 0xb1, 0x81, 0x55, 0x18, 0x03,
-	0x02, 0x00, 0x00, 0xff, 0xff, 0x8e, 0x74, 0x87, 0x6a, 0x61, 0x02, 0x00, 0x00,
+var fileDescriptor_topicmanage_c9d4a958c1b553ac = []byte{
+	// 313 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x91, 0x4d, 0x4b, 0xf3, 0x40,
+	0x14, 0x85, 0xdf, 0x4e, 0x5f, 0xab, 0x1e, 0x6a, 0xd4, 0x4b, 0x5b, 0xc3, 0xb8, 0x69, 0x47, 0x17,
+	0x2e, 0x24, 0x82, 0xee, 0x04, 0x71, 0x61, 0x41, 0xba, 0x69, 0x25, 0x55, 0xc1, 0x95, 0x24, 0x61,
+	0xd0, 0x50, 0xf3, 0x61, 0x32, 0xf1, 0x37, 0xfb, 0x33, 0xc4, 0x69, 0x8c, 0x4d, 0x8c, 0xd9, 0xb8,
+	0x9b, 0x8f, 0x73, 0x9e, 0xcb, 0x3d, 0x07, 0xbb, 0x2a, 0x8a, 0x7d, 0x2f, 0x70, 0x42, 0xe7, 0x49,
+	0x5a, 0x71, 0x12, 0xa9, 0x88, 0xa0, 0x9f, 0xf4, 0x59, 0x1c, 0xa3, 0x77, 0x2d, 0xd5, 0x55, 0x14,
+	0x86, 0xd2, 0x53, 0xd3, 0x2c, 0xb0, 0xe5, 0x6b, 0x26, 0x53, 0x45, 0x3d, 0xac, 0xdd, 0x7e, 0xaa,
+	0xcc, 0xd6, 0xb0, 0x75, 0xb4, 0x69, 0x2f, 0x2f, 0xe2, 0x04, 0xfd, 0x8a, 0x3a, 0x8d, 0xa3, 0x30,
+	0x95, 0x34, 0x40, 0x67, 0x9a, 0x05, 0xae, 0x4c, 0xb4, 0xbe, 0x6d, 0xe7, 0x37, 0x71, 0x81, 0xfe,
+	0x3c, 0x73, 0x53, 0x2f, 0xf1, 0x5d, 0xa9, 0x11, 0x35, 0xfc, 0x76, 0xc1, 0x27, 0x03, 0x6c, 0x12,
+	0x9b, 0x4c, 0x8f, 0x64, 0x93, 0x58, 0x98, 0x18, 0x54, 0xed, 0xcb, 0x81, 0xe2, 0x12, 0x7b, 0x77,
+	0xe1, 0x5f, 0xd0, 0x1c, 0xe6, 0x4f, 0x40, 0x0e, 0x3f, 0x87, 0x71, 0x93, 0xb9, 0x2f, 0x7e, 0xfa,
+	0xdc, 0x18, 0x07, 0x11, 0xfe, 0x8f, 0x1d, 0xe5, 0x68, 0x6a, 0xd7, 0xd6, 0x67, 0x31, 0xc2, 0x76,
+	0xe1, 0xcd, 0xc3, 0x31, 0xc0, 0x66, 0x0b, 0xed, 0xdc, 0xb0, 0xd9, 0x6c, 0x71, 0xfa, 0xce, 0xd0,
+	0xd5, 0x80, 0xb9, 0x4c, 0xde, 0x7c, 0x4f, 0xd2, 0x3d, 0xb6, 0x4a, 0xb1, 0xd2, 0xd0, 0xfa, 0xae,
+	0xc8, 0xaa, 0xeb, 0x87, 0x8f, 0x1a, 0x14, 0xf9, 0x16, 0xff, 0xe8, 0x01, 0x46, 0x79, 0x43, 0x2a,
+	0xd9, 0x6a, 0xe3, 0xe3, 0xa2, 0x49, 0x52, 0xa0, 0x1f, 0xb1, 0x53, 0x8d, 0x8f, 0x0e, 0x56, 0x9d,
+	0xbf, 0xb4, 0xc3, 0x0f, 0x9b, 0x45, 0xc5, 0x80, 0x31, 0xd6, 0xf3, 0x1c, 0x89, 0xaf, 0x5a, 0xca,
+	0xc5, 0xf0, 0xfd, 0xda, 0xbf, 0x2f, 0x8a, 0xdb, 0xd1, 0x1f, 0x67, 0x1f, 0x01, 0x00, 0x00, 0xff,
+	0xff, 0x9c, 0xa5, 0xeb, 0x3c, 0x06, 0x03, 0x00, 0x00,
 }
