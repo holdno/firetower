@@ -71,7 +71,7 @@ func (t *TcpClient) Connect() error {
 	go func() {
 		var overflow []byte
 		for {
-			var msg = make([]byte, 1024)
+			var msg = make([]byte, 1024*16)
 
 			l, err := lis.Read(msg)
 			if err != nil {
