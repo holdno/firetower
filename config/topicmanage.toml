@@ -5,3 +5,6 @@ servicetimeout = 8 # 服务端超时时间 超过该时间没有收到client的�
 
 [grpc]
 port = 6667
+
+[socket]
+port = 6666

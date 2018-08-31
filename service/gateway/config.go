@@ -5,7 +5,7 @@ import (
 	"github.com/pelletier/go-toml"
 )
 
-type BeaconTowerConfig struct {
+type FireTowerConfig struct {
 	chanLens         int
 	heartbeat        int
 	heartbeatContent string
@@ -13,7 +13,6 @@ type BeaconTowerConfig struct {
 }
 
 var (
-	BTConfig   *BeaconTowerConfig
 	ConfigTree *toml.Tree
 )
 

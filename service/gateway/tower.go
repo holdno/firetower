@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/websocket"
-	pb "github.com/holdno/firetower/grpc/topicmanage"
+	pb "github.com/holdno/firetower/grpc/manager"
 	"github.com/holdno/firetower/socket"
 	"google.golang.org/grpc"
 	"strings"
@@ -335,18 +335,19 @@ func (t *FireTower) readDispose() {
 //}
 
 func (t *FireTower) Publish(message *TopicMessage) bool {
-	// topicManage.Publish(message.Topic, message.Data)
-	res, err := TopicManageGrpc.Publish(context.Background(), &pb.PublishRequest{
-		Topic: message.Topic,
-		Data:  message.Data,
-	})
-	if err != nil {
-		t.LogError(fmt.Sprintf("Publish Error, Topic:%s,Data:%s; error:%v", message.Topic, string(message.Data), err))
-		return false
-	} else {
-		// TODO 发送失败
-		return res.Ok
-	}
+	topicManage.Publish(message.Topic, message.Data)
+	//res, err := TopicManageGrpc.Publish(context.Background(), &pb.PublishRequest{
+	//	Topic: message.Topic,
+	//	Data:  message.Data,
+	//})
+	//if err != nil {
+	//	t.LogError(fmt.Sprintf("Publish Error, Topic:%s,Data:%s; error:%v", message.Topic, string(message.Data), err))
+	//	return false
+	//} else {
+	//	// TODO 发送失败
+	//	return res.Ok
+	//}
+	return true
 }
 
 // 接收到用户publish的消息时触发

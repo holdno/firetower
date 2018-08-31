@@ -18,7 +18,7 @@ type TcpClient struct {
 	isClose   bool
 	closeChan chan struct{}
 	Conn      net.Conn
-	readIn    chan []byte
+	readIn    chan *PushMessage
 	sendOut   chan []byte
 }
 
@@ -38,7 +38,7 @@ func NewClient(address string) *TcpClient {
 	return &TcpClient{
 		Address: address,
 		isClose: false,
-		readIn:  make(chan []byte, 1024),
+		readIn:  make(chan *PushMessage, 1024),
 		sendOut: make(chan []byte, 1024),
 	}
 }
@@ -69,8 +69,10 @@ func (t *TcpClient) Connect() error {
 
 	// read channal
 	go func() {
+		var overflow []byte
 		for {
 			var msg = make([]byte, 1024)
+
 			l, err := lis.Read(msg)
 			if err != nil {
 				if !t.isClose {
@@ -78,13 +80,15 @@ func (t *TcpClient) Connect() error {
 				}
 				return
 			}
+
+			overflow = Depack(append(overflow, msg[:l]...), t.readIn)
 			select {
-			case t.readIn <- msg[:l]:
 			case <-t.closeChan:
 				if !t.isClose {
 					t.Close()
 					return
 				}
+			default:
 			}
 		}
 	}()
@@ -110,13 +114,13 @@ func (t *TcpClient) Close() {
 	}
 }
 
-func (t *TcpClient) Read() ([]byte, error) {
+func (t *TcpClient) Read() (*PushMessage, error) {
 	if t.isClose {
 		return nil, ErrorClose
 	}
 Retry:
 	message := <-t.readIn
-	if string(message) == "heartbeat" {
+	if string(message.Type) == "heartbeat" {
 		goto Retry
 	}
 	return message, nil
@@ -127,7 +131,7 @@ func (t *TcpClient) send(message []byte) error {
 		return ErrorClose
 	}
 	// 设置一秒超时
-	ticker := time.NewTicker(time.Duration(1) * time.Second)
+	ticker := time.NewTicker(time.Duration(3) * time.Second)
 	for {
 		select {
 		case t.sendOut <- message:
@@ -170,19 +174,7 @@ func (t *TcpClient) DelTopic(topic []string) error {
 }
 
 func (t *TcpClient) Publish(topic string, data json.RawMessage) error {
-	// 发消息只能发送一条
-	message := &TopicEvent{
-		Topic: []string{topic},
-		Type:  PublishKey,
-		DATA:  data,
-	}
-
-	if data, err := json.Marshal(message); err == nil {
-		t.send(data)
-		return nil
-	} else {
-		return err
-	}
+	return t.send(Enpack(PublishKey, topic, data))
 }
 
 func (t *TcpClient) OnPush(fn func(t, topic string, message []byte)) {
@@ -194,14 +186,7 @@ func (t *TcpClient) OnPush(fn func(t, topic string, message []byte)) {
 				// 只可能是连接断开了
 				return
 			}
-			data := new(PushMessage)
-			err = json.Unmarshal(message, &data)
-			if err != nil {
-				// 消息下发格式不统一 直接忽略
-				fmt.Sprintf("push message format error:%v", err)
-				continue
-			}
-			fn(data.Type, data.Topic, data.Data)
+			fn(message.Type, message.Topic, message.Data)
 		}
 	}()
 }
