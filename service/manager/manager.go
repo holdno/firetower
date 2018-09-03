@@ -3,7 +3,6 @@ package manager
 import (
 	"container/list"
 	"context"
-	"encoding/json"
 	"fmt"
 	pb "github.com/holdno/firetower/grpc/manager"
 	"github.com/holdno/firetower/socket"
@@ -38,18 +37,14 @@ func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishReque
 		// topic 没有存在订阅列表中直接过滤
 		return &pb.PublishResponse{Ok: false}, errors.New("topic not exist")
 	} else {
-		b, _ := json.Marshal(&socket.PushMessage{
-			Topic: request.Topic,
-			Data:  request.Data,
-			Type:  "push",
-		})
+
 		table := value.(*list.List)
 		t.mu.Lock()
 		for e := table.Front(); e != nil; e = e.Next() {
-			fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
 
 			conn, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
 			if ok {
+				b := socket.Enpack(socket.PublishKey, request.Topic, request.Data)
 				_, err := conn.(net.Conn).Write(b)
 				if err != nil {
 					// 直接操作table.Remove 可以改变map中list的值

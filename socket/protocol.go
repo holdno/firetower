@@ -27,7 +27,6 @@ func Enpack(pushType, topic string, content []byte) []byte {
 	res = append(res, []byte(topic)...)
 	res = append(res, ConstNewLine)
 	res = append(res, content...)
-	res = append(res, ConstNewLine)
 	return append(append([]byte(ConstHeader), IntToBytes(len(res))...), res...)
 }
 
@@ -52,31 +51,27 @@ func Depack(buffer []byte, readerChannel chan *PushMessage) []byte {
 			// params[1] = topic
 			// params[2] = content
 			var (
-				params [][]byte
-				n      = 0
+				params  [][]byte
+				content = make([]byte, messageLength)
 			)
-			for {
-				if n == 3 {
-					break // 包解析正常的话 第三次读取会触发 reader.ReadLine 的 err: io.EOF
-				}
-				param, _, err := reader.ReadLine()
-				if err != nil {
-					break
-				}
-				if n == 0 {
-					params = bytes.Split(param, []byte(ConstSplitSpace))
-				} else {
-					params = append(params, param)
-				}
-				n++
-			}
 
-			if len(params) < 3 {
-				// 包解析发生错误
-				fmt.Printf("\n\n\n 严重错误\n包解析出错\n\n\n")
+			param, _, err := reader.ReadLine()
+			if err != nil {
 				break
 			}
 
+			params = bytes.Split(param, []byte(ConstSplitSpace))
+			n, err := reader.Read(content)
+			if err != nil {
+				break
+			}
+			params = append(params, content[:n])
+
+			if len(params) < 3 {
+				// 包解析发生错误
+				fmt.Printf("\n\n\n 严重错误\n包解析出错 \n\n\n")
+				break
+			}
 			readerChannel <- &PushMessage{
 				Type:  string(params[0]),
 				Topic: string(params[1]),
