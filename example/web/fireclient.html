@@ -121,6 +121,11 @@ input, button {
 </body>
 <script type="text/javascript" src="firetower_v0.1.js"></script>
 <script type="text/javascript" >
+    window.onresize = function(){
+        var dom = document.getElementById('messageshow')
+        dom.scrollTop = dom.scrollHeight
+    }
+
 	function RndNum(n){
 	    var rnd="";
 	    for(var i=0;i<n;i++)

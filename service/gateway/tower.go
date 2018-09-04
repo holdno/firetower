@@ -232,8 +232,8 @@ func (t *FireTower) readLoop() {
 		select {
 		case t.readIn <- message:
 		case <-timeout:
-			if t.readTimeout != nil {
-				t.readTimeout(jsonStruct)
+			if t.readTimeoutHandler != nil {
+				t.readTimeoutHandler(jsonStruct)
 			}
 			b, _ := json.Marshal(jsonStruct)
 			t.LogError(fmt.Sprintf("readLoop timeout: %q", b))
