@@ -85,6 +85,13 @@ tower.SetReadHandler(func(message *gateway.TopicMessage) bool { // 绑定ReadHan
 })
 ```
 
+- ReadTimeoutHandler 客户端信息publish超时处理
+``` golang 
+tower.SetReadTimeoutHandler(func(message *gateway.TopicMessage) {
+    fmt.Println("read timeout:", message.Type, message.Topic, message.Data)
+})
+```
+
 - BeforeSubscribeHandler 客户端订阅某些topic时触发(这个时候topic还没有订阅，是before subscribe)
 ``` golang
 tower.SetBeforeSubscribeHandler(func(topic []string) bool {

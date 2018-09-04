@@ -55,7 +55,7 @@ type FireTower struct {
 	subscribeHandler       func(topic []string) bool
 	unSubscribeHandler     func(topic []string) bool
 	beforeSubscribeHandler func(topic []string) bool
-	readTimeout            func(*TopicMessage)
+	readTimeoutHandler     func(*TopicMessage)
 
 	logger func(t, info string) // 接管系统log t log类型 info log信息
 }
@@ -360,7 +360,7 @@ func (t *FireTower) SetBeforeSubscribeHandler(fn func(topic []string) bool) {
 
 // readIn channal写满了  生产 > 消费的情况下触发超时机制
 func (t *FireTower) SetReadTimeoutHandler(fn func(*TopicMessage)) {
-	t.readTimeout = fn
+	t.readTimeoutHandler = fn
 }
 
 // 接管log
