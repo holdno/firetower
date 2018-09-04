@@ -80,7 +80,6 @@ func (t *TcpClient) Connect() error {
 				}
 				return
 			}
-
 			overflow = Depack(append(overflow, msg[:l]...), t.readIn)
 			select {
 			case <-t.closeChan:

@@ -144,7 +144,7 @@ input, button {
 	// })
 	var bt = new firetower("ws://localhost:9999/ws", function(){
 		console.log('建立连接')
-		bt.subscribe(subscribe)
+		bt.subscribe([subscribe, "/world"])
 		var dom = document.getElementById('messageshow')
 		var newMessage = `
 			<div class="messageline">

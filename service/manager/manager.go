@@ -42,13 +42,12 @@ func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishReque
 		t.mu.Lock()
 		for e := table.Front(); e != nil; e = e.Next() {
 
-			conn, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
+			c, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
 			if ok {
 				b := socket.Enpack(socket.PublishKey, request.Topic, request.Data)
-				_, err := conn.(net.Conn).Write(b)
+				_, err := c.(*connectBucket).conn.Write(b)
 				if err != nil {
-					// 直接操作table.Remove 可以改变map中list的值
-					// connOffLine(conn.(net.Conn))
+					c.(*connectBucket).close()
 				}
 			}
 		}
@@ -76,7 +75,7 @@ func (t *topicGrpcService) SubscribeTopic(ctx context.Context, request *pb.Subsc
 	for _, topic := range request.Topic {
 		var store *list.List
 		value, ok := topicRelevance.Load(topic)
-		fmt.Println(request.Ip)
+
 		if !ok {
 			// topic map 里面维护一个链表
 			store = list.New()
@@ -166,7 +165,7 @@ func StartSocketService(addr string) {
 		}
 		fmt.Println("new socket connect")
 		bucket.relation()     // 建立连接关系
-		go bucket.reader()    // 收包
+		go bucket.sendLoop()  // 发包
 		go bucket.handler()   // 接收字节流并解包
 		go bucket.heartbeat() // 心跳
 	}
@@ -177,7 +176,7 @@ func (c *connectBucket) relation() {
 	_, ok := ConnIndexTable.Load(c.conn.RemoteAddr().String())
 	if !ok {
 		fmt.Println("保存连接：", c.conn.RemoteAddr().String())
-		ConnIndexTable.Store(c.conn.RemoteAddr().String(), c.conn)
+		ConnIndexTable.Store(c.conn.RemoteAddr().String(), c)
 	}
 }
 
@@ -197,7 +196,6 @@ func (c *connectBucket) delRelation() {
 }
 
 func (c *connectBucket) close() {
-	fmt.Println("close")
 	c.mu.Lock()
 	if !c.isClose {
 		c.isClose = true
@@ -220,7 +218,7 @@ func (c *connectBucket) handler() {
 	}
 }
 
-func (c *connectBucket) reader() {
+func (c *connectBucket) sendLoop() {
 	for {
 		select {
 		case message := <-c.packetChan:
@@ -230,16 +228,14 @@ func (c *connectBucket) reader() {
 					// topic 没有存在订阅列表中直接过滤
 					continue
 				} else {
-					b := socket.Enpack(message.Type, message.Topic, message.Data)
 					table := value.(*list.List)
 					for e := table.Front(); e != nil; e = e.Next() {
-						conn, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
+						bucket, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
 						if ok {
-							fmt.Println("pushd", e.Value.(*topicRelevanceItem).ip, string(b))
-							_, err := conn.(net.Conn).Write(b)
+							_, err := bucket.(*connectBucket).conn.Write(socket.Enpack(message.Type, message.Topic, message.Data))
 							if err != nil {
 								// 直接操作table.Remove 可以改变map中list的值
-								c.close()
+								bucket.(*connectBucket).close()
 								return
 							}
 						}
@@ -256,7 +252,7 @@ func (c *connectBucket) heartbeat() {
 	t := time.NewTicker(1 * time.Minute)
 	for {
 		<-t.C
-		_, err := c.conn.Write(socket.Enpack("heartbeat", "", nil))
+		_, err := c.conn.Write(socket.Enpack("heartbeat", "", []byte("heartbeat")))
 		if err != nil {
 			c.close()
 			return
