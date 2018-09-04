@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/holdno/firetower/service/gateway"
@@ -13,6 +14,12 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+}
+
+type messageInfo struct {
+	From string `json:"from"`
+	Data string `json:"data"`
+	Type string `json:"type"`
 }
 
 var GlobalIdWorker *snowFlakeByGo.Worker
@@ -38,6 +45,21 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		// 判断发送方是否有权限向到达方发送内容
 		tower.Publish(message)
 		return true
+	})
+
+	tower.SetReadTimeoutHandler(func(message *gateway.TopicMessage) {
+		fmt.Println("read timeout:", message.Type, message.Topic, message.Data)
+		messageInfo := new(messageInfo)
+		err := json.Unmarshal(message.Data, messageInfo)
+		if err != nil {
+			return
+		}
+		messageInfo.Type = "timeout"
+		b, _ := json.Marshal(messageInfo)
+		err = tower.ToSelf(b)
+		if err != gateway.ErrorClose {
+			fmt.Println("err:", err)
+		}
 	})
 
 	tower.SetBeforeSubscribeHandler(func(topic []string) bool {

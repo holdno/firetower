@@ -13,9 +13,14 @@ import (
 	"time"
 )
 
+type Manager struct {
+	logger func(t, info string)
+}
+
 var (
 	topicRelevance sync.Map
 	ConnIndexTable sync.Map
+	prefix         = "[firetower manager]"
 )
 
 type topicRelevanceItem struct {
@@ -26,11 +31,14 @@ type topicRelevanceItem struct {
 
 type topicGrpcService struct {
 	mu sync.RWMutex
+
+	logInfo  func(info string)
+	logError func(err string)
 }
 
 // Publish
 func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishRequest) (*pb.PublishResponse, error) {
-	fmt.Println("new message:", string(request.Data))
+	t.logInfo(fmt.Sprintf("new message:", string(request.Data)))
 
 	value, ok := topicRelevance.Load(request.Topic)
 	if !ok {
@@ -44,8 +52,11 @@ func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishReque
 
 			c, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
 			if ok {
-				b := socket.Enpack(socket.PublishKey, request.Topic, request.Data)
-				_, err := c.(*connectBucket).conn.Write(b)
+				b, err := socket.Enpack(socket.PublishKey, request.Topic, request.Data)
+				if err != nil {
+
+				}
+				_, err = c.(*connectBucket).conn.Write(b)
 				if err != nil {
 					c.(*connectBucket).close()
 				}
@@ -125,13 +136,16 @@ func (t *topicGrpcService) UnSubscribeTopic(ctx context.Context, request *pb.UnS
 	return &pb.UnSubscribeTopicResponse{}, nil
 }
 
-func StartGrpcService(port string) {
+func (m *Manager) StartGrpcService(port string) {
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
-		fmt.Println("grpc service listen error:", err)
+		m.logError(fmt.Sprintf("grpc service listen error: %v", err))
 	}
 	s := grpc.NewServer()
-	pb.RegisterTopicServiceServer(s, &topicGrpcService{})
+	pb.RegisterTopicServiceServer(s, &topicGrpcService{
+		logInfo:  m.logInfo,
+		logError: m.logError,
+	})
 	s.Serve(lis)
 }
 
@@ -142,28 +156,33 @@ type connectBucket struct {
 	isClose    bool
 	closeChan  chan struct{}
 	mu         sync.Mutex
+
+	logInfo  func(info string)
+	logError func(err string)
 }
 
-func StartSocketService(addr string) {
+func (m *Manager) StartSocketService(addr string) {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		fmt.Println("tcp service listen error:", err)
+		m.logError(fmt.Sprintf("tcp service listen error: %v", err))
 		return
 	}
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
-			fmt.Println("tcp service accept error:", err)
+			m.logError(fmt.Sprintf("tcp service accept error: %v", err))
 			continue
 		}
 		bucket := &connectBucket{
 			overflow:   make([]byte, 0),
-			packetChan: make(chan *socket.PushMessage, 32),
+			packetChan: make(chan *socket.PushMessage, 1024),
 			conn:       conn,
 			isClose:    false,
 			closeChan:  make(chan struct{}),
+
+			logInfo:  m.logInfo,
+			logError: m.logError,
 		}
-		fmt.Println("new socket connect")
 		bucket.relation()     // 建立连接关系
 		go bucket.sendLoop()  // 发包
 		go bucket.handler()   // 接收字节流并解包
@@ -171,11 +190,31 @@ func StartSocketService(addr string) {
 	}
 }
 
+func (m *Manager) logInfo(info string) {
+	if m.logger != nil {
+		m.logger("INFO", info)
+	} else {
+		fmt.Printf("%s %s %s %s\n", prefix, time.Now().Format("2006-01-02 15:04:05"), "INFO", info)
+	}
+}
+
+func (m *Manager) logError(info string) {
+	if m.logger != nil {
+		m.logger("Error", info)
+	} else {
+		fmt.Printf("%s %s %s %s\n", prefix, time.Now().Format("2006-01-02 15:04:05"), "ERROR", info)
+	}
+}
+
+func (m *Manager) ReplaceLog(fn func(t, info string)) {
+	m.logger = fn
+}
+
 func (c *connectBucket) relation() {
 	// 维护一个IP->连接关系的索引map
 	_, ok := ConnIndexTable.Load(c.conn.RemoteAddr().String())
 	if !ok {
-		fmt.Println("保存连接：", c.conn.RemoteAddr().String())
+		c.logInfo(fmt.Sprintf("新连接: %s", c.conn.RemoteAddr().String()))
 		ConnIndexTable.Store(c.conn.RemoteAddr().String(), c)
 	}
 }
@@ -214,7 +253,10 @@ func (c *connectBucket) handler() {
 			c.close()
 			return
 		}
-		c.overflow = socket.Depack(append(c.overflow, buffer[:l]...), c.packetChan)
+		c.overflow, err = socket.Depack(append(c.overflow, buffer[:l]...), c.packetChan)
+		if err != nil {
+			c.logError(err.Error())
+		}
 	}
 }
 
@@ -232,7 +274,11 @@ func (c *connectBucket) sendLoop() {
 					for e := table.Front(); e != nil; e = e.Next() {
 						bucket, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
 						if ok {
-							_, err := bucket.(*connectBucket).conn.Write(socket.Enpack(message.Type, message.Topic, message.Data))
+							bytes, err := socket.Enpack(message.Type, message.Topic, message.Data)
+							if err != nil {
+								c.logError(fmt.Sprintf("protocol 封包时错误，%v", err))
+							}
+							_, err = bucket.(*connectBucket).conn.Write(bytes)
 							if err != nil {
 								// 直接操作table.Remove 可以改变map中list的值
 								bucket.(*connectBucket).close()
@@ -252,7 +298,8 @@ func (c *connectBucket) heartbeat() {
 	t := time.NewTicker(1 * time.Minute)
 	for {
 		<-t.C
-		_, err := c.conn.Write(socket.Enpack("heartbeat", "", []byte("heartbeat")))
+		b, _ := socket.Enpack("heartbeat", "*", []byte("heartbeat"))
+		_, err := c.conn.Write(b)
 		if err != nil {
 			c.close()
 			return

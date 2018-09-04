@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"fmt"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -19,7 +19,16 @@ const (
 // header+messageLength+[pushType]+ConstSplitSpace+[topic]+ConstNewLine+[content]
 // |      header       |           type           |       params       |  body  |
 // 封包
-func Enpack(pushType, topic string, content []byte) []byte {
+func Enpack(pushType, topic string, content []byte) ([]byte, error) {
+	if pushType == "" {
+		return nil, errors.New("type is empty")
+	}
+	if topic == "" {
+		return nil, errors.New("topic is empty")
+	}
+	if content == nil {
+		return nil, errors.New("content is empty")
+	}
 	// ConstHeaderConstIntLengthData
 	// data = pushType+ConstSplitSpace+topic+ConstSplitSpace+content
 	res := []byte(pushType)
@@ -27,13 +36,16 @@ func Enpack(pushType, topic string, content []byte) []byte {
 	res = append(res, []byte(topic)...)
 	res = append(res, ConstNewLine)
 	res = append(res, content...)
-	return append(append([]byte(ConstHeader), IntToBytes(len(res))...), res...)
+	return append(append([]byte(ConstHeader), IntToBytes(len(res))...), res...), nil
 }
 
 //解包
-func Depack(buffer []byte, readerChannel chan *PushMessage) []byte {
+func Depack(buffer []byte, readerChannel chan *PushMessage) ([]byte, error) {
 	length := len(buffer)
-	var i int
+	var (
+		i   int
+		err error
+	)
 	for i = 0; i < length; i = i + 1 {
 		// 首先判断是否是一个完整的包
 		if length < i+ConstHeaderLength+ConstIntLength {
@@ -69,8 +81,8 @@ func Depack(buffer []byte, readerChannel chan *PushMessage) []byte {
 
 			if len(params) < 3 {
 				// 包解析发生错误
-				fmt.Printf("\n\n\n 严重错误\n包解析出错 \n\n\n")
-				break
+				err = errors.New("包解析出错")
+				goto Error
 			}
 			readerChannel <- &PushMessage{
 				Type:  string(params[0]),
@@ -80,9 +92,11 @@ func Depack(buffer []byte, readerChannel chan *PushMessage) []byte {
 		}
 	}
 	if i == length {
-		return make([]byte, 0)
+		return make([]byte, 0), nil
 	}
-	return buffer[i:] // 返回的是粘包多余的部分
+	return buffer[i:], nil // 返回的是粘包多余的部分
+Error:
+	return buffer[i:], err
 }
 
 //整形转换成字节

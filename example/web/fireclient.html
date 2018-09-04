@@ -93,6 +93,10 @@ html, body {
 	color: #fff;
 }
 
+.point {
+    cursor: pointer;
+}
+
 input, button {
 	outline: none;
 }
@@ -110,7 +114,7 @@ input, button {
 		</div>
 		<div class="box-bottom">
 			<input value="" placeholder="点击输入信息" id="sendInput"/>
-			<button onclick="send()">send</button>
+			<button onclick="send()" class="point">send</button>
 		</div>
 	</div>
 	
@@ -174,19 +178,41 @@ input, button {
 			`
 			dom.innerHTML = dom.innerHTML + newMessage
 			dom.scrollTop = dom.scrollHeight
+		} else if(msg.type == 'timeout'){
+            var dom = document.getElementById('messageshow')
+            var newMessage = `
+				<div class="messageline">
+					<span class="from">
+						`+msg.from+`:
+					</span>
+					`+msg.data+` <font color="#f00" class='point' onclick="bt.publish(subscribe, {from: user, data: '`+msg.data+`', type: 'publish'})">发送失败(超时):点击重试</font>
+				</div>
+			`
+            dom.innerHTML = dom.innerHTML + newMessage
+            dom.scrollTop = dom.scrollHeight
 		}
 		
 	}
 
 	bt.onclose = function(){
 		console.log('连接断开')
+        var dom = document.getElementById('messageshow')
+        var newMessage = `
+			<div class="messageline">
+				<span class="from">
+					system:
+				</span>
+				您已断开连接，尝试刷新界面重新连接。
+			</div>
+		`
+        dom.innerHTML = dom.innerHTML + newMessage
 	}
 
 	function send(){
 		var dom = document.getElementById('sendInput')
 		if(dom.value == '') {
 			alert('请输入要发送的内容')
-			return 
+			return
 		}
 		bt.publish(subscribe, {
 			from: user,

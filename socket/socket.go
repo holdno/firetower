@@ -80,7 +80,10 @@ func (t *TcpClient) Connect() error {
 				}
 				return
 			}
-			overflow = Depack(append(overflow, msg[:l]...), t.readIn)
+			overflow, err = Depack(append(overflow, msg[:l]...), t.readIn)
+			if err != nil {
+				fmt.Println("[manager client] depack error:", err)
+			}
 			select {
 			case <-t.closeChan:
 				if !t.isClose {
@@ -173,10 +176,14 @@ func (t *TcpClient) DelTopic(topic []string) error {
 }
 
 func (t *TcpClient) Publish(topic string, data json.RawMessage) error {
-	return t.send(Enpack(PublishKey, topic, data))
+	b, err := Enpack(PublishKey, topic, data)
+	if err != nil {
+		return err
+	}
+	return t.send(b)
 }
 
-func (t *TcpClient) OnPush(fn func(t, topic string, message []byte)) {
+func (t *TcpClient) OnPush(fn func(topic string, message []byte)) {
 	go func() {
 		for {
 			message, err := t.Read()
@@ -185,7 +192,7 @@ func (t *TcpClient) OnPush(fn func(t, topic string, message []byte)) {
 				// 只可能是连接断开了
 				return
 			}
-			fn(message.Type, message.Topic, message.Data)
+			fn(message.Topic, message.Data)
 		}
 	}()
 }

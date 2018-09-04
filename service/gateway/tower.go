@@ -7,7 +7,6 @@ import (
 	"github.com/gorilla/websocket"
 	pb "github.com/holdno/firetower/grpc/manager"
 	"github.com/holdno/firetower/socket"
-	"google.golang.org/grpc"
 	"strings"
 	"sync"
 	"time"
@@ -56,45 +55,15 @@ type FireTower struct {
 	subscribeHandler       func(topic []string) bool
 	unSubscribeHandler     func(topic []string) bool
 	beforeSubscribeHandler func(topic []string) bool
+	readTimeout            func(*TopicMessage)
+
+	logger func(t, info string) // 接管系统log t log类型 info log信息
 }
 
 func init() {
-	loadConfig()       // 加载配置
-	BuildTopicManage() // 构建服务架构
-
-	go func() {
-
-	Retry:
-		var err error
-		conn, err := grpc.Dial(ConfigTree.Get("grpc.address").(string), grpc.WithInsecure())
-		if err != nil {
-			fmt.Println("[topic manager] grpc connect error:", ConfigTree.Get("topicServiceAddr").(string), err)
-		}
-		TopicManageGrpc = pb.NewTopicServiceClient(conn)
-		topicManage = socket.NewClient(ConfigTree.Get("topicServiceAddr").(string))
-
-		if err != nil {
-			panic(fmt.Sprintf("[topic manager] can not get local IP, error:%v", err))
-		}
-		topicManage.OnPush(func(t, topic string, message []byte) {
-			fmt.Println("[topic manager] on push", "topic:", string(topic), "data:", message)
-
-			TM.centralChan <- &SendMessage{
-				MessageType: 1,
-				Data:        message,
-				Topic:       topic,
-			}
-		})
-		err = topicManage.Connect()
-		if err != nil {
-			fmt.Println("[topic manager] wait topic manager online", ConfigTree.Get("topicServiceAddr").(string))
-			time.Sleep(time.Duration(1) * time.Second)
-			goto Retry
-		} else {
-			fmt.Println("[topic manager] connected:", ConfigTree.Get("topicServiceAddr").(string))
-		}
-	}()
-
+	loadConfig()         // 加载配置
+	buildTopicManage()   // 构建服务架构
+	buildManagerClient() // 构建连接manager(topic管理服务)的客户端
 }
 
 func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
@@ -111,6 +80,7 @@ func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
 }
 
 func (t *FireTower) Run() {
+
 	t.LogInfo(fmt.Sprintf("new websocket running, ConnId:%d ClientId:%s", t.connId, t.ClientId))
 	// 读取websocket信息
 	go t.readLoop()
@@ -205,7 +175,6 @@ func (t *FireTower) Close() {
 	if !t.isClose {
 		t.isClose = true
 		if t.Topic != nil {
-			fmt.Println("unbindtopic")
 			t.UnbindTopic(t.Topic)
 		}
 		t.ws.Close()
@@ -227,7 +196,6 @@ func (t *FireTower) sendLoop() {
 				Data:        []byte("heartbeat"),
 			}
 			if err := t.Send(message); err != nil {
-				fmt.Println("heartbeat send failed:", err)
 				goto collapse
 				return
 			}
@@ -260,8 +228,15 @@ func (t *FireTower) readLoop() {
 			MessageType: messageType,
 			Data:        jsonStruct,
 		}
+		timeout := time.After(time.Duration(3) * time.Second)
 		select {
 		case t.readIn <- message:
+		case <-timeout:
+			if t.readTimeout != nil {
+				t.readTimeout(jsonStruct)
+			}
+			b, _ := json.Marshal(jsonStruct)
+			t.LogError(fmt.Sprintf("readLoop timeout: %q", b))
 		case <-t.closeSwitch:
 			return
 		}
@@ -334,8 +309,12 @@ func (t *FireTower) readDispose() {
 //	}
 //}
 
-func (t *FireTower) Publish(message *TopicMessage) bool {
-	topicManage.Publish(message.Topic, message.Data)
+func (t *FireTower) Publish(message *TopicMessage) error {
+	err := topicManage.Publish(message.Topic, message.Data)
+	if err != nil {
+		t.LogError(fmt.Sprintf("publish err: %v", err))
+		return err
+	}
 	//res, err := TopicManageGrpc.Publish(context.Background(), &pb.PublishRequest{
 	//	Topic: message.Topic,
 	//	Data:  message.Data,
@@ -347,7 +326,16 @@ func (t *FireTower) Publish(message *TopicMessage) bool {
 	//	// TODO 发送失败
 	//	return res.Ok
 	//}
-	return true
+	return nil
+}
+
+func (t *FireTower) ToSelf(b []byte) error {
+	if t.isClose != true {
+		err := t.ws.WriteMessage(1, b)
+		return err
+	} else {
+		return ErrorClose
+	}
 }
 
 // 接收到用户publish的消息时触发
@@ -368,6 +356,16 @@ func (t *FireTower) SetUnSubscribeHandler(fn func(topic []string) bool) {
 // 用户订阅topic前触发
 func (t *FireTower) SetBeforeSubscribeHandler(fn func(topic []string) bool) {
 	t.beforeSubscribeHandler = fn
+}
+
+// readIn channal写满了  生产 > 消费的情况下触发超时机制
+func (t *FireTower) SetReadTimeoutHandler(fn func(*TopicMessage)) {
+	t.readTimeout = fn
+}
+
+// 接管log
+func (t *FireTower) ReplaceLog(fn func(t, info string)) {
+	t.logger = fn
 }
 
 // grpc方法封装
