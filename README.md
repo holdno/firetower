@@ -132,7 +132,7 @@ tower.SetUnSubscribeHandler(func(topic []string) bool {
     return true
 })
 ```
-注意：当客户端断开websocket连接时beacontower会将其在线时订阅的所有topic进行退订 会触发UnSubscirbeHandler  
+注意：当客户端断开websocket连接时firetower会将其在线时订阅的所有topic进行退订 会触发UnSubscirbeHandler  
 
 ## TODO
 小包合并大包，减少发送频率    
