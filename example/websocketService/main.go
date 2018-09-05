@@ -7,6 +7,7 @@ import (
 	"github.com/holdno/firetower/service/gateway"
 	"github.com/holdno/snowFlakeByGo"
 	"net/http"
+	_ "net/http/pprof"
 	"strconv"
 )
 
