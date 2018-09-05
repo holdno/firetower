@@ -85,7 +85,7 @@ tower.SetReadHandler(func(message *gateway.TopicMessage) bool { // 绑定ReadHan
 })
 ```
 
-- ReadTimeoutHandler 客户端信息publish超时处理
+- ReadTimeoutHandler 客户端websocket请求超时处理(生产速度高于消费速度)
 ``` golang 
 tower.SetReadTimeoutHandler(func(message *gateway.TopicMessage) {
     fmt.Println("read timeout:", message.Type, message.Topic, message.Data)
