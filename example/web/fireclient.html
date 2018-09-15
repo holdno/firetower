@@ -30,9 +30,11 @@ html, body {
 	box-sizing: border-box;
 	overflow-y: auto;
 }
+
 .box-bottom {
 	width: 100%;
-	height: 30px;
+	height: 40px;
+	line-height: 40px;
 	position: absolute;
 	left: 0;
 	bottom: 0;
@@ -41,6 +43,7 @@ html, body {
 	padding-right: 50px;
 	padding-left: 15px;
 }
+
 .box-bottom button {
 	color: #fff;
 	width: 50px;
@@ -76,12 +79,13 @@ html, body {
 	line-height: 16px;
 	font-size: 14px;
 	text-align: left;
-	padding-left: 15px;
+	padding: 0 15px;
 	box-sizing: border-box;
 	position: absolute;
 	top: 50px;
 	left: 0;
 	color: #fff;
+	overflow: hidden;
 }
 .messageline {
 	width: 100%;
@@ -94,12 +98,131 @@ html, body {
 }
 
 .point {
-    cursor: pointer;
+  cursor: pointer;
 }
 
 input, button {
 	outline: none;
 }
+
+.title {
+	float: left;
+}
+
+.add-room {
+	float: right;
+}
+
+.dialog {
+	opacity: 0;
+	transition: .5s;
+}
+
+.dialog .mask {
+	position: fixed;
+	top: 0;
+	right: 0;
+	left: 0;
+	bottom: 0;
+	margin: auto;
+	z-index: 1000;
+	width: 100%;
+	height: 100%;
+	background: rgba(55,55,55,.6);
+}
+
+.dialog .dialog-content {
+	position: fixed;
+	top: 0;
+	right: 0;
+	left: 0;
+	bottom: 0;
+	margin: auto;
+	z-index: 1001;
+	width: 80%;
+	height: 25%;
+	background: #fff;
+	border-radius: 10px;
+	overflow: hidden;
+	box-sizing: border-box;
+	padding: 16px;
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.dialog-hidden {
+	display: none !important;
+}
+
+.input-body {
+	display: inline-block;
+	box-sizing: border-box;
+	width: 100%;
+	position: relative;
+	vertical-align: middle;
+	line-height: normal;
+}
+
+.input-body .label {
+  line-height: 30px;
+}
+
+.fire-input {
+	display: inline-block;
+	box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  line-height: 1.5;
+  padding: 4px 7px;
+  font-size: 12px;
+  border: 1px solid #dcdee2;
+  border-radius: 4px;
+  color: #515a6e;
+  background-color: #fff;
+  background-image: none;
+  position: relative;
+  cursor: text;
+  transition: border .2s ease-in-out,background .2s ease-in-out,box-shadow .2s ease-in-out;
+}
+
+.dialog-footer {
+	margin-top: 20px;
+  text-align: right;
+}
+
+.fire-button-default {
+	color: #515a6e;
+  background-color: #fff;
+  border-color: #dcdee2;
+}
+
+.fire-button-primary {
+	color: #fff;
+  background-color: #409eff;
+  border-color: #409eff;
+}
+
+.fire-button {
+	display: inline-block;
+  margin-bottom: 0;
+  font-weight: 400;
+  text-align: center;
+  -ms-touch-action: manipulation;
+  touch-action: manipulation;
+  cursor: pointer;
+  background-image: none;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  padding: 5px 15px 6px;
+  font-size: 12px;
+  border-radius: 4px;
+  transition: color .2s linear,background-color .2s linear,border .2s linear,box-shadow .2s linear;
+}
+
 </style>
 <body>
 	<div class="box" id="message">
@@ -107,20 +230,47 @@ input, button {
 			firetower
 		</div>
 		<div class="box-user">
-			您的编码:<span id="code"></span>,当前在线:<span id="connected">1</span>
+			<div class="title">
+				您的编码:<span id="code"></span>,当前在线:<span id="connected">1</span>
+			</div>
+			<div id="changeRoom" class="add-room">
+				切换房间
+			</div>
 		</div>
 		<div class="box-message" id="messageshow">
-			
+
 		</div>
 		<div class="box-bottom">
 			<input value="" placeholder="点击输入信息" id="sendInput"/>
 			<button onclick="send()" class="point">send</button>
 		</div>
 	</div>
-	
+
+	<div class="dialog dialog-hidden" id="dialog">
+		<div class="mask" id="dialogMask"></div>
+		<div class="dialog-content">
+			<div class="dialog-title">
+				<!-- <input value="" placeholder="房间名" id="changeRoomName"/> -->
+				<div class="input-body">
+					<label class="label" for="changeRoomNum">房间号:</label>
+					<input
+						value=""
+						type="number"
+						id="changeRoomNum"
+						class="fire-input"
+						placeholder="请输入房间号"
+					/>
+				</div>
+				<div class="dialog-footer">
+					<button onclick="changeRoom()" class="fire-button fire-button-primary">切换</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
 </body>
 <script type="text/javascript" src="firetower_v0.1.js"></script>
-<script type="text/javascript" >
+<script type="text/javascript">
     window.onresize = function(){
         var dom = document.getElementById('messageshow')
         dom.scrollTop = dom.scrollHeight
@@ -151,9 +301,9 @@ input, button {
 	// 	console.log('建立连接')
 	// 	bt.subscribe(subscribe)
 	// })
-	var bt = new firetower("ws://localhost:9999/ws", function(){
+	var bt = new firetower("ws://firetower-conn.ojbk.io/ws", function(){
 		console.log('建立连接')
-		bt.subscribe([subscribe, "/world"])
+		bt.subscribe([subscribe])
 		var dom = document.getElementById('messageshow')
 		var newMessage = `
 			<div class="messageline">
@@ -196,7 +346,7 @@ input, button {
             dom.innerHTML = dom.innerHTML + newMessage
             dom.scrollTop = dom.scrollHeight
 		}
-		
+
 	}
 
 	bt.onclose = function(){
@@ -227,11 +377,64 @@ input, button {
 		dom.value = ''
 	}
 
-    document.onkeydown = function (event) {
-        var e = event || window.event
-        if (e && e.keyCode == 13) { //回车键的键值为13
-            send() //调用登录按钮的登录事件
-        }
-    }
+  document.onkeydown = function (event) {
+      var e = event || window.event
+      if (e && e.keyCode == 13) { //回车键的键值为13
+          send() //调用登录按钮的登录事件
+      }
+  }
+
+	// 打开弹窗
+	function openAddDialog () {
+		var dialogDom = document.getElementById('dialog')
+		dialogDom.classList.remove('dialog-hidden')
+		setTimeout(() => {
+			dialogDom.style.opacity = 1
+		}, 500)
+	}
+
+	// 关闭弹窗
+	function closeAddDialog () {
+		var dialogDom = document.getElementById('dialog')
+		dialogDom.style.opacity = 0
+		setTimeout(() => {
+			dialogDom.className += ' dialog-hidden'
+		}, 500)
+	}
+
+	// 切换房间
+	function changeRoom () {
+		var roomDom = document.getElementById('changeRoomNum')
+		if(roomDom.value == '') {
+			alert('请输入房间号')
+			return
+		}
+		// 取消订阅
+		bt.unsubscribe([subscribe])
+		// 取消新的房间
+		bt.subscribe([`/chat/${roomDom.value}`])
+		subscribe = `/chat/${roomDom.value}`
+		var dom = document.getElementById('messageshow')
+		var newMessage = `
+			<div class="messageline">
+				<span class="from">
+					system:
+				</span>
+				进入${roomDom.value}房间。
+			</div>
+		`
+		dom.innerHTML = dom.innerHTML + newMessage
+		roomDom.value = ''
+		closeAddDialog()
+	}
+
+	// 显示切换房间弹窗
+	var changeRoomDom = document.getElementById('changeRoom')
+	changeRoomDom.onclick = openAddDialog
+
+	// 点击mask
+	var maskDom = document.getElementById('dialogMask')
+	maskDom.onclick = closeAddDialog
+
 </script>
 </html>

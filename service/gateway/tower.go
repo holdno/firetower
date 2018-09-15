@@ -7,6 +7,8 @@ import (
 	"github.com/gorilla/websocket"
 	pb "github.com/holdno/firetower/grpc/manager"
 	"github.com/holdno/firetower/socket"
+	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +17,17 @@ import (
 var (
 	topicManage     *socket.TcpClient
 	TopicManageGrpc pb.TopicServiceClient
+
+	// Log Level 支持三种模式
+	// INFO 打印所有日志信息
+	// WARN 只打印警告及错误类型的日志信息
+	// ERROR 只打印错误日志
+	LogLevel          string    = "INFO"
+	DefaultWriter     io.Writer = os.Stdout
+	DefaultErrorWrite io.Writer = os.Stderr
+
+	// 默认配置文件读取路径
+	DefaultConfigPath string = "./fireTower.toml"
 )
 
 // 接收的消息结构体
@@ -57,13 +70,17 @@ type FireTower struct {
 	beforeSubscribeHandler func(topic []string) bool
 	readTimeoutHandler     func(*TopicMessage)
 
-	logger func(t, info string) // 接管系统log t log类型 info log信息
+	Context context.Context
+	logger  func(t, info string) // 接管系统log t log类型 info log信息
+}
+
+type Context struct {
+	startTime time.Time
 }
 
 func init() {
-	loadConfig()         // 加载配置
-	buildTopicManage()   // 构建服务架构
-	buildManagerClient() // 构建连接manager(topic管理服务)的客户端
+	buildTopicManage()                    // 构建服务架构
+	BuildManagerClient(DefaultConfigPath) // 构建连接manager(topic管理服务)的客户端
 }
 
 func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {

@@ -16,11 +16,11 @@ var (
 	ConfigTree *toml.Tree
 )
 
-func loadConfig() {
+func loadConfig(path string) {
 	var (
 		err error
 	)
-	if ConfigTree, err = toml.LoadFile("./fireTower.toml"); err != nil {
+	if ConfigTree, err = toml.LoadFile(path); err != nil {
 		fmt.Println("config load failed:", err)
 	}
 }
