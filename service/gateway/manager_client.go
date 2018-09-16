@@ -9,7 +9,6 @@ import (
 )
 
 func BuildManagerClient(configPath string) {
-	loadConfig(configPath) // 加载配置
 	go func() {
 
 	Retry:

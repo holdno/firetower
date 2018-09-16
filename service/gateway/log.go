@@ -13,9 +13,9 @@ const (
 // 输出格式 [firetower] 2018-08-09 17:49:30 INFO info
 func (t *FireTower) LogInfo(info string) {
 	if Logger != nil {
-		Logger.Log("INFO", info)
+		Logger("INFO", info)
 	} else {
-		fmt.Printf("%s %s %s %s\n", prefix, time.Now().Format("2006-01-02 15:04:05"), "INFO", info)
+		fmt.Fprintf(DefaultWriter, "%s %s %s %s\n", prefix, time.Now().Format("2006-01-02 15:04:05"), "INFO", info)
 	}
 }
 
@@ -23,6 +23,6 @@ func (t *FireTower) LogError(err string) {
 	if Logger != nil {
 		Logger("ERROR", err)
 	} else {
-		fmt.Printf("%s %s %s %s\n", prefix, time.Now().Format("2006-01-02 15:04:05"), "ERROR", err)
+		fmt.Fprintf(DefaultErrorWrite, "%s %s %s %s\n", prefix, time.Now().Format("2006-01-02 15:04:05"), "ERROR", err)
 	}
 }

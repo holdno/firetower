@@ -301,7 +301,7 @@ input, button {
 	// 	console.log('建立连接')
 	// 	bt.subscribe(subscribe)
 	// })
-	var bt = new firetower("ws://firetower-conn.ojbk.io/ws", function(){
+	var bt = new firetower("ws://localhost:9999/ws", function(){
 		console.log('建立连接')
 		bt.subscribe([subscribe])
 		var dom = document.getElementById('messageshow')

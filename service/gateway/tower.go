@@ -22,12 +22,13 @@ var (
 	// INFO 打印所有日志信息
 	// WARN 只打印警告及错误类型的日志信息
 	// ERROR 只打印错误日志
-	LogLevel          string    = "INFO"
+	LogLevel                    = "INFO"
 	DefaultWriter     io.Writer = os.Stdout
 	DefaultErrorWrite io.Writer = os.Stderr
 
 	// 默认配置文件读取路径
-	DefaultConfigPath string = "./fireTower.toml"
+	DefaultConfigPath                      = "./fireTower.toml"
+	Logger            func(t, info string) // 接管系统log t log类型 info log信息
 )
 
 // 接收的消息结构体
@@ -71,7 +72,6 @@ type FireTower struct {
 	readTimeoutHandler     func(*TopicMessage)
 
 	Context context.Context
-	logger  func(t, info string) // 接管系统log t log类型 info log信息
 }
 
 type Context struct {
@@ -79,6 +79,7 @@ type Context struct {
 }
 
 func init() {
+	loadConfig(DefaultConfigPath)         // 加载配置
 	buildTopicManage()                    // 构建服务架构
 	BuildManagerClient(DefaultConfigPath) // 构建连接manager(topic管理服务)的客户端
 }
@@ -161,7 +162,7 @@ func (t *FireTower) UnbindTopic(topic []string) bool {
 			// 订阅失败影响客户端正常业务逻辑 直接关闭连接
 			t.Close()
 		} else {
-			if t.subscribeHandler != nil {
+			if t.unSubscribeHandler != nil {
 				t.unSubscribeHandler(delTopic)
 			}
 		}
@@ -253,7 +254,7 @@ func (t *FireTower) readLoop() {
 				t.readTimeoutHandler(jsonStruct)
 			}
 			b, _ := json.Marshal(jsonStruct)
-			t.LogError(fmt.Sprintf("readLoop timeout: %q", b))
+			t.LogError(fmt.Sprintf("readLoop 超时: %q", b))
 		case <-t.closeSwitch:
 			return
 		}
@@ -378,11 +379,6 @@ func (t *FireTower) SetBeforeSubscribeHandler(fn func(topic []string) bool) {
 // readIn channal写满了  生产 > 消费的情况下触发超时机制
 func (t *FireTower) SetReadTimeoutHandler(fn func(*TopicMessage)) {
 	t.readTimeoutHandler = fn
-}
-
-// 接管log
-func (t *FireTower) ReplaceLog(fn func(t, info string)) {
-	t.logger = fn
 }
 
 // grpc方法封装

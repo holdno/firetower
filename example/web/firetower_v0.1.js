@@ -5,7 +5,7 @@ function firetower(addr, onopen) {
 	var _this = this
 
 	this.subscribeKey = 'subscribe'
-	this.unSubscribeKey = 'unSubscribeKey'
+	this.unSubscribeKey = 'unSubscribe'
 	this.publishKey = 'publish'
 	this.logopen = true // 开启log
 
@@ -74,7 +74,7 @@ function firetower(addr, onopen) {
 		}
 
 		if (_this.logopen) {
-			logInfo('unsubscribe:"' + topicArr.join(',') + '"')
+			logInfo('unSubscribe:"' + topicArr.join(',') + '"')
 		}
 
 		ws.send(JSON.stringify({
