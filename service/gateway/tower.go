@@ -60,7 +60,7 @@ type FireTower struct {
 	readIn      chan *FireInfo    // 读取队列
 	sendOut     chan *SendMessage // 发送队列
 	ws          *websocket.Conn   // 保存底层websocket连接
-	Topic       []string          // 订阅topic列表
+	Topic       map[string]bool   // 订阅topic列表
 	isClose     bool              // 判断当前websocket是否被关闭
 	closeSwitch chan struct{}     // 用来作为关闭websocket的触发点
 	mutex       sync.Mutex        // 避免并发close chan
@@ -110,22 +110,13 @@ func (t *FireTower) Run() {
 
 func (t *FireTower) BindTopic(topic []string) bool {
 	var (
-		exist    = 0
 		addTopic []string
 	)
 	bucket := TM.GetBucket(t)
 	for _, v := range topic {
-		for _, vv := range t.Topic {
-			if v == vv {
-				exist = 1
-				break
-			}
-		}
-		if exist == 1 {
-			exist = 0
-		} else {
+		if _, ok := t.Topic[v]; !ok {
 			addTopic = append(addTopic, v) // 待订阅的topic
-			t.Topic = append(t.Topic, v)
+			t.Topic[v] = true
 			bucket.AddSubscribe(v, t)
 		}
 	}
@@ -147,13 +138,13 @@ func (t *FireTower) UnbindTopic(topic []string) bool {
 	var delTopic []string // 待取消订阅的topic列表
 	bucket := TM.GetBucket(t)
 	for _, v := range topic {
-		for k, vv := range t.Topic {
-			if v == vv { // 如果客户端已经订阅过该topic才执行退订
-				delTopic = append(delTopic, v)
-				t.Topic = append(t.Topic[:k], t.Topic[k+1:]...)
-				bucket.DelSubscribe(v, t)
-				break
-			}
+		if _, ok := t.Topic[v]; ok {
+			// 如果客户端已经订阅过该topic才执行退订
+			delTopic = append(delTopic, v)
+			delete(t.Topic, v)
+			bucket.DelSubscribe(v, t)
+			break
+
 		}
 	}
 	if len(delTopic) > 0 {
@@ -193,7 +184,11 @@ func (t *FireTower) Close() {
 	if !t.isClose {
 		t.isClose = true
 		if t.Topic != nil {
-			t.UnbindTopic(t.Topic)
+			var topicSlice []string
+			for k := range t.Topic {
+				topicSlice = append(topicSlice, k)
+			}
+			t.UnbindTopic(topicSlice)
 		}
 		t.ws.Close()
 		close(t.closeSwitch)
