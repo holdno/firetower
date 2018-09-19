@@ -27,6 +27,9 @@ var GlobalIdWorker *snowFlakeByGo.Worker
 
 func main() {
 	GlobalIdWorker, _ = snowFlakeByGo.NewWorker(1)
+	// 如果是集群环境  一定一定要给每个服务设置唯一的id
+	// 取值范围 1-1024
+	gateway.ClusterId = 1
 	http.HandleFunc("/ws", Websocket)
 	fmt.Println("websocket service start: 0.0.0.0:9999")
 	http.ListenAndServe("0.0.0.0:9999", nil)
@@ -41,17 +44,16 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	id := GlobalIdWorker.GetId()
 	tower := gateway.BuildTower(ws, strconv.FormatInt(id, 10))
 
-	tower.SetReadHandler(func(message *gateway.TopicMessage) bool {
+	tower.SetReadHandler(func(fire *gateway.FireInfo) bool {
 		// 做发送验证
 		// 判断发送方是否有权限向到达方发送内容
-		tower.Publish(message)
+		tower.Publish(fire)
 		return true
 	})
 
-	tower.SetReadTimeoutHandler(func(message *gateway.TopicMessage) {
-		fmt.Println("read timeout:", message.Type, message.Topic, message.Data)
+	tower.SetReadTimeoutHandler(func(fire *gateway.FireInfo) {
 		messageInfo := new(messageInfo)
-		err := json.Unmarshal(message.Data, messageInfo)
+		err := json.Unmarshal(fire.Message.Data, messageInfo)
 		if err != nil {
 			return
 		}
@@ -72,24 +74,24 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		for _, v := range topic {
 			num := tower.GetConnectNum(v)
 
-			var pushmsg = new(gateway.TopicMessage)
-			pushmsg.Topic = v
-			pushmsg.Data = []byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num))
+			var pushmsg = gateway.GetFireInfo(tower)
+			pushmsg.Message.Topic = v
+			pushmsg.Message.Data = []byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num))
 			tower.Publish(pushmsg)
 		}
-
 		return true
 	})
+
 	tower.SetUnSubscribeHandler(func(topic []string) bool {
 		for _, v := range topic {
 			num := tower.GetConnectNum(v)
-			var pushmsg = new(gateway.TopicMessage)
-			pushmsg.Topic = v
-			pushmsg.Data = []byte(fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num))
+			var pushmsg = gateway.GetFireInfo(tower)
+			pushmsg.Message.Topic = v
+			pushmsg.Message.Data = []byte(fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num))
 			tower.Publish(pushmsg)
 		}
-
 		return true
 	})
+
 	tower.Run()
 }

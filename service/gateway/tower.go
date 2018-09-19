@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/websocket"
 	pb "github.com/holdno/firetower/grpc/manager"
 	"github.com/holdno/firetower/socket"
+	"github.com/holdno/snowFlakeByGo"
 	"io"
 	"os"
 	"strings"
@@ -18,30 +19,74 @@ var (
 	topicManage     *socket.TcpClient
 	TopicManageGrpc pb.TopicServiceClient
 
+	ClusterId = 1
+
 	// Log Level 支持三种模式
 	// INFO 打印所有日志信息
 	// WARN 只打印警告及错误类型的日志信息
 	// ERROR 只打印错误日志
-	LogLevel                    = "INFO"
-	DefaultWriter     io.Writer = os.Stdout
-	DefaultErrorWrite io.Writer = os.Stderr
+	LogLevel                     = "INFO"
+	DefaultWriter      io.Writer = os.Stdout
+	DefaultErrorWriter io.Writer = os.Stderr
 
 	// 默认配置文件读取路径
-	DefaultConfigPath                      = "./fireTower.toml"
-	Logger            func(t, info string) // 接管系统log t log类型 info log信息
+	DefaultConfigPath                                        = "./fireTower.toml"
+	TowerLogger       func(t *FireTower, types, info string) // 接管系统log t log类型 info log信息
+	FireLogger        func(f *FireInfo, types, info string)  // 接管系统log t log类型 info log信息
+
+	firePool sync.Pool
+	IdWorker *snowFlakeByGo.Worker
 )
 
 // 接收的消息结构体
 type FireInfo struct {
+	Context     *fireLife
 	MessageType int
-	Data        *TopicMessage
+	Message     *TopicMessage
 }
 
 type TopicMessage struct {
-	Context
 	Topic string          `json:"topic"`
 	Data  json.RawMessage `json:"data"` // 可能是个json
 	Type  string          `json:"type"`
+}
+
+func GetFireInfo(t *FireTower) *FireInfo {
+	fireInfo := firePool.Get().(*FireInfo)
+	fireInfo.Context.reset(t)
+	return fireInfo
+}
+
+func recycling(f *FireInfo) {
+	firePool.Put(f)
+}
+
+func (f *FireInfo) Panic(info string) {
+	FireLogger(f, "Panic", info)
+	recycling(f)
+}
+
+func (f *FireInfo) Info(info string) {
+	FireLogger(f, "INFO", info)
+}
+
+func (f *FireInfo) Error(info string) {
+	FireLogger(f, "ERROR", info)
+}
+
+type fireLife struct {
+	id        int64
+	startTime time.Time
+	message   *TopicMessage
+	clientId  string
+	userId    string
+}
+
+func (f *fireLife) reset(t *FireTower) {
+	f.startTime = time.Now()
+	f.id = IdWorker.GetId()
+	f.clientId = t.ClientId
+	f.userId = t.UserId
 }
 
 // 发送的消息结构体
@@ -66,13 +111,11 @@ type FireTower struct {
 	closeSwitch chan struct{}     // 用来作为关闭websocket的触发点
 	mutex       sync.Mutex        // 避免并发close chan
 
-	readHandler            func(*TopicMessage) bool
+	readHandler            func(*FireInfo) bool
+	readTimeoutHandler     func(*FireInfo)
 	subscribeHandler       func(topic []string) bool
 	unSubscribeHandler     func(topic []string) bool
 	beforeSubscribeHandler func(topic []string) bool
-	readTimeoutHandler     func(*TopicMessage)
-
-	Context context.Context
 }
 
 type Context struct {
@@ -80,9 +123,20 @@ type Context struct {
 }
 
 func init() {
-	loadConfig(DefaultConfigPath)         // 加载配置
-	buildTopicManage()                    // 构建服务架构
-	BuildManagerClient(DefaultConfigPath) // 构建连接manager(topic管理服务)的客户端
+	firePool.New = func() interface{} {
+		return &FireInfo{
+			Context: new(fireLife),
+			Message: new(TopicMessage),
+		}
+	}
+	IdWorker, _ = snowFlakeByGo.NewWorker(1)
+
+	TowerLogger = towerLog
+	FireLogger = fireLog
+
+	loadConfig(DefaultConfigPath) // 加载配置
+	buildTopicManage()            // 构建服务架构
+	BuildManagerClient()          // 构建连接manager(topic管理服务)的客户端
 }
 
 func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
@@ -91,6 +145,7 @@ func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
 		ClientId:    clientId,
 		readIn:      make(chan *FireInfo, ConfigTree.Get("chanLens").(int64)),
 		sendOut:     make(chan *SendMessage, ConfigTree.Get("chanLens").(int64)),
+		Topic:       make(map[string]bool),
 		ws:          ws,
 		isClose:     false,
 		closeSwitch: make(chan struct{}),
@@ -99,8 +154,7 @@ func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
 }
 
 func (t *FireTower) Run() {
-
-	t.LogInfo(fmt.Sprintf("new websocket running, ConnId:%d ClientId:%s", t.connId, t.ClientId))
+	logInfo(t, fmt.Sprintf("new websocket running, ConnId:%d ClientId:%s", t.connId, t.ClientId))
 	// 读取websocket信息
 	go t.readLoop()
 	// 处理读取事件
@@ -177,7 +231,7 @@ func (t *FireTower) Send(message *SendMessage) error {
 }
 
 func (t *FireTower) Close() {
-	t.LogInfo("websocket connect is closed")
+	logInfo(t, "websocket connect is closed")
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if !t.isClose {
@@ -222,33 +276,26 @@ collapse:
 
 func (t *FireTower) readLoop() {
 	for {
-		messageType, data, err := t.ws.ReadMessage() // 内部声明可以及时释放内存
-		if err != nil {
-			t.LogError(fmt.Sprintf("读取客户端消息时发生错误:%v", err))
+		messageType, data, err := t.ws.ReadMessage()
+		if err != nil { // 断开连接
 			goto collapse // 出现问题烽火台直接坍塌
 		}
-		t.LogInfo(fmt.Sprintf("new message:%s", string(data)))
+		fire := GetFireInfo(t) // 从对象池中获取消息对象 降低GC压力
+		fire.MessageType = messageType
 
-		var jsonStruct = new(TopicMessage)
-
-		if err := json.Unmarshal(data, &jsonStruct); err != nil {
-			t.LogError(fmt.Sprintf("客户端消息解析错误:%v", err))
+		if err := json.Unmarshal(data, &fire.Message); err != nil {
+			fire.Panic(fmt.Sprintf("client sended data was unmarshal error:%v", err))
 			continue
 		}
 
-		message := &FireInfo{
-			MessageType: messageType,
-			Data:        jsonStruct,
-		}
 		timeout := time.After(time.Duration(3) * time.Second)
 		select {
-		case t.readIn <- message:
+		case t.readIn <- fire:
 		case <-timeout:
 			if t.readTimeoutHandler != nil {
-				t.readTimeoutHandler(jsonStruct)
+				t.readTimeoutHandler(fire)
 			}
-			b, _ := json.Marshal(jsonStruct)
-			t.LogError(fmt.Sprintf("readLoop 超时: %q", b))
+			fire.Panic(fmt.Sprintf("readLoop timeout: %q", data))
 		case <-t.closeSwitch:
 			return
 		}
@@ -261,20 +308,20 @@ collapse:
 // 这里要做逻辑拆分，判断用户是要进行通信还是topic订阅
 func (t *FireTower) readDispose() {
 	for {
-		message, err := t.read()
+		fire, err := t.read()
 		if err != nil {
-			t.LogError(fmt.Sprintf("read message failed:%v", err))
+			fire.Panic(fmt.Sprintf("read message failed:%v", err))
 			t.Close()
 			return
 		}
 		if err == nil {
-			switch message.Data.Type {
+			switch fire.Message.Type {
 			case "subscribe": // 客户端订阅topic
-				if message.Data.Topic == "" {
-					t.LogError(fmt.Sprintf("onSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
+				if fire.Message.Topic == "" {
+					fire.Panic(fmt.Sprintf("onSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
 					continue
 				}
-				addTopic := strings.Split(message.Data.Topic, ",")
+				addTopic := strings.Split(fire.Message.Topic, ",")
 				// 如果设置了订阅前触发事件则调用
 				if t.beforeSubscribeHandler != nil {
 					ok := t.beforeSubscribeHandler(addTopic)
@@ -284,24 +331,26 @@ func (t *FireTower) readDispose() {
 				}
 				t.BindTopic(addTopic)
 			case "unSubscribe": // 客户端取消订阅topic
-				if message.Data.Topic == "" {
-					t.LogError(fmt.Sprintf("unOnSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
+				if fire.Message.Topic == "" {
+					fire.Panic(fmt.Sprintf("unOnSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
 					continue
 				}
-				delTopic := strings.Split(message.Data.Topic, ",")
+				delTopic := strings.Split(fire.Message.Topic, ",")
 				t.UnbindTopic(delTopic)
 			default:
 				if t.isClose {
 					return
 				}
 				if t.readHandler != nil {
-					ok := t.readHandler(message.Data)
+					ok := t.readHandler(fire)
 					if !ok {
 						t.Close()
 						return
 					}
 				}
 			}
+			fire.Info("Extinguished")
+			recycling(fire)
 		} else {
 			// TODO 正常情况下不会出现无法json序列化的情况 因为这个参数本身就是string to json来的
 		}
@@ -321,10 +370,10 @@ func (t *FireTower) readDispose() {
 //	}
 //}
 
-func (t *FireTower) Publish(message *TopicMessage) error {
-	err := topicManage.Publish(message.Topic, message.Data)
+func (t *FireTower) Publish(fire *FireInfo) error {
+	err := topicManage.Publish(fire.Message.Topic, fire.Message.Data)
 	if err != nil {
-		t.LogError(fmt.Sprintf("publish err: %v", err))
+		fire.Panic(fmt.Sprintf("publish err: %v", err))
 		return err
 	}
 	//res, err := TopicManageGrpc.Publish(context.Background(), &pb.PublishRequest{
@@ -351,7 +400,7 @@ func (t *FireTower) ToSelf(b []byte) error {
 }
 
 // 接收到用户publish的消息时触发
-func (t *FireTower) SetReadHandler(fn func(*TopicMessage) bool) {
+func (t *FireTower) SetReadHandler(fn func(*FireInfo) bool) {
 	t.readHandler = fn
 }
 
@@ -371,7 +420,7 @@ func (t *FireTower) SetBeforeSubscribeHandler(fn func(topic []string) bool) {
 }
 
 // readIn channal写满了  生产 > 消费的情况下触发超时机制
-func (t *FireTower) SetReadTimeoutHandler(fn func(*TopicMessage)) {
+func (t *FireTower) SetReadTimeoutHandler(fn func(*FireInfo)) {
 	t.readTimeoutHandler = fn
 }
 

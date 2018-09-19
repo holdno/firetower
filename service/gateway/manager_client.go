@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func BuildManagerClient(configPath string) {
+func BuildManagerClient() {
 	go func() {
 
 	Retry:
