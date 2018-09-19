@@ -38,6 +38,7 @@ type FireInfo struct {
 }
 
 type TopicMessage struct {
+	Context
 	Topic string          `json:"topic"`
 	Data  json.RawMessage `json:"data"` // 可能是个json
 	Type  string          `json:"type"`
@@ -143,8 +144,6 @@ func (t *FireTower) UnbindTopic(topic []string) bool {
 			delTopic = append(delTopic, v)
 			delete(t.Topic, v)
 			bucket.DelSubscribe(v, t)
-			break
-
 		}
 	}
 	if len(delTopic) > 0 {
