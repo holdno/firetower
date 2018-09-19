@@ -54,8 +54,12 @@ var upgrader = websocket.Upgrader{
 var GlobalIdWorker *snowFlakeByGo.Worker
 
 func main() {
-    GlobalIdWorker, _ = snowFlakeByGo.NewWorker(1) 
+    GlobalIdWorker, _ = snowFlakeByGo.NewWorker(1)
+    // 如果是集群环境  一定一定要给每个服务设置唯一的id
+    // 取值范围 1-1024
+    gateway.ClusterId = 1
     http.HandleFunc("/ws", Websocket)
+    fmt.Println("websocket service start: 0.0.0.0:9999")
     http.ListenAndServe("0.0.0.0:9999", nil)
 }
 
@@ -64,7 +68,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
     ...
     // 验证成功才升级连接
     ws, _ := upgrader.Upgrade(w, r, nil)
-    // 生成一个全局唯一的clientid
+    // 生成一个全局唯一的clientid 正常业务下这个clientid应该由前端传入
     id := GlobalIdWorker.GetId()
     tower := gateway.BuildTower(ws, strconv.FormatInt(id, 10)) // 生成一个烽火台
     tower.Run()
@@ -74,7 +78,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 - ReadHandler 收到客户端发送的消息时触发
 ``` golang
 tower := gateway.BuildTower(ws, strconv.FormatInt(id, 10)) // 创建beacontower实例
-tower.SetReadHandler(func(message *gateway.TopicMessage) bool { // 绑定ReadHandler回调方法
+tower.SetReadHandler(func(fire *gateway.FireInfo) bool { // 绑定ReadHandler回调方法
     // message.Data 为客户端传来的信息
     // message.Topic 为消息传递的topic
     // 用户可在此做发送验证
@@ -87,7 +91,7 @@ tower.SetReadHandler(func(message *gateway.TopicMessage) bool { // 绑定ReadHan
 
 - ReadTimeoutHandler 客户端websocket请求超时处理(生产速度高于消费速度)
 ``` golang 
-tower.SetReadTimeoutHandler(func(message *gateway.TopicMessage) {
+tower.SetReadTimeoutHandler(func(fire *gateway.FireInfo) {
     fmt.Println("read timeout:", message.Type, message.Topic, message.Data)
 })
 ```

@@ -103,13 +103,13 @@ type FireTower struct {
 	UserId   string // 一般业务中每个连接都是一个用户 用来给业务提供用户识别
 	Cookie   []byte // 这里提供给业务放一个存放跟当前连接相关的数据信息
 
-	readIn      chan *FireInfo    // 读取队列
-	sendOut     chan *SendMessage // 发送队列
-	ws          *websocket.Conn   // 保存底层websocket连接
-	Topic       map[string]bool   // 订阅topic列表
-	isClose     bool              // 判断当前websocket是否被关闭
-	closeSwitch chan struct{}     // 用来作为关闭websocket的触发点
-	mutex       sync.Mutex        // 避免并发close chan
+	readIn    chan *FireInfo    // 读取队列
+	sendOut   chan *SendMessage // 发送队列
+	ws        *websocket.Conn   // 保存底层websocket连接
+	Topic     map[string]bool   // 订阅topic列表
+	isClose   bool              // 判断当前websocket是否被关闭
+	closeChan chan struct{}     // 用来作为关闭websocket的触发点
+	mutex     sync.Mutex        // 避免并发close chan
 
 	readHandler            func(*FireInfo) bool
 	readTimeoutHandler     func(*FireInfo)
@@ -135,26 +135,26 @@ func init() {
 	FireLogger = fireLog
 
 	loadConfig(DefaultConfigPath) // 加载配置
-	buildTopicManage()            // 构建服务架构
+	buildBuckets()                // 构建服务架构
 	BuildManagerClient()          // 构建连接manager(topic管理服务)的客户端
 }
 
 func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
 	tower = &FireTower{
-		connId:      getConnId(),
-		ClientId:    clientId,
-		readIn:      make(chan *FireInfo, ConfigTree.Get("chanLens").(int64)),
-		sendOut:     make(chan *SendMessage, ConfigTree.Get("chanLens").(int64)),
-		Topic:       make(map[string]bool),
-		ws:          ws,
-		isClose:     false,
-		closeSwitch: make(chan struct{}),
+		connId:    getConnId(),
+		ClientId:  clientId,
+		readIn:    make(chan *FireInfo, ConfigTree.Get("chanLens").(int64)),
+		sendOut:   make(chan *SendMessage, ConfigTree.Get("chanLens").(int64)),
+		Topic:     make(map[string]bool),
+		ws:        ws,
+		isClose:   false,
+		closeChan: make(chan struct{}),
 	}
 	return
 }
 
 func (t *FireTower) Run() {
-	logInfo(t, fmt.Sprintf("new websocket running, ConnId:%d ClientId:%s", t.connId, t.ClientId))
+	logInfo(t, "new websocket running")
 	// 读取websocket信息
 	go t.readLoop()
 	// 处理读取事件
@@ -244,7 +244,7 @@ func (t *FireTower) Close() {
 			t.UnbindTopic(topicSlice)
 		}
 		t.ws.Close()
-		close(t.closeSwitch)
+		close(t.closeChan)
 	}
 }
 
@@ -265,7 +265,7 @@ func (t *FireTower) sendLoop() {
 				goto collapse
 				return
 			}
-		case <-t.closeSwitch:
+		case <-t.closeChan:
 			heartTicker.Stop()
 			return
 		}
@@ -296,7 +296,7 @@ func (t *FireTower) readLoop() {
 				t.readTimeoutHandler(fire)
 			}
 			fire.Panic(fmt.Sprintf("readLoop timeout: %q", data))
-		case <-t.closeSwitch:
+		case <-t.closeChan:
 			return
 		}
 	}

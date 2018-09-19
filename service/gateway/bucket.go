@@ -26,7 +26,7 @@ type Bucket struct {
 	BuffChan       chan *SendMessage                // bucket的消息处理队列
 }
 
-func buildTopicManage() {
+func buildBuckets() {
 	bucketNum := int(ConfigTree.Get("bucket.Num").(int64))
 	TM = &TowerManager{
 		bucket:      make([]*Bucket, bucketNum),
