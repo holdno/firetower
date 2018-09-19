@@ -98,10 +98,11 @@ type SendMessage struct {
 }
 
 type FireTower struct {
-	connId   uint64 // 连接id 每台服务器上该id从1开始自增
-	ClientId string // 客户端id 用来做业务逻辑
-	UserId   string // 一般业务中每个连接都是一个用户 用来给业务提供用户识别
-	Cookie   []byte // 这里提供给业务放一个存放跟当前连接相关的数据信息
+	connId    uint64 // 连接id 每台服务器上该id从1开始自增
+	ClientId  string // 客户端id 用来做业务逻辑
+	UserId    string // 一般业务中每个连接都是一个用户 用来给业务提供用户识别
+	Cookie    []byte // 这里提供给业务放一个存放跟当前连接相关的数据信息
+	startTime time.Time
 
 	readIn    chan *FireInfo    // 读取队列
 	sendOut   chan *SendMessage // 发送队列
@@ -143,6 +144,7 @@ func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
 	tower = &FireTower{
 		connId:    getConnId(),
 		ClientId:  clientId,
+		startTime: time.Now(),
 		readIn:    make(chan *FireInfo, ConfigTree.Get("chanLens").(int64)),
 		sendOut:   make(chan *SendMessage, ConfigTree.Get("chanLens").(int64)),
 		Topic:     make(map[string]bool),

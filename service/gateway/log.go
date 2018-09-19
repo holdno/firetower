@@ -22,10 +22,11 @@ func logError(t *FireTower, err string) {
 func towerLog(t *FireTower, types, err string) {
 	fmt.Fprintf(
 		DefaultErrorWriter,
-		"%s %s | TIME %s | CONNID %d | CLIENTID %s | USERID %s | INFO %s\n",
+		"%s %s | LOGTIME %s | STARTTIME %s | CONNID %d | CLIENTID %s | USERID %s | INFO %s\n",
 		"[FireTower]",
 		types,
 		time.Now().Format("2006-01-02 15:04:05"),
+		t.startTime.Format("2006-01-02 15:04:05"),
 		t.connId,
 		t.ClientId,
 		t.UserId,
