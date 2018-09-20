@@ -47,7 +47,7 @@ func sendLog(s *SendMessage, types, info string) {
 		}
 		fmt.Fprintf(
 			os.Stdout,
-			"[SendInfo] %s%s%s | LOGTIME %s | RUNTIME %s%v%s | MSGID %s | EVENT %s%s%s | TOPIC %s%s%s | DATA %s | LOG %s\n",
+			"[SendInfo] %s %s %s | LOGTIME %s | RUNTIME %s %v %s | MSGID %s | EVENT %s %s %s | TOPIC %s %s %s | DATA %s | LOG %s\n",
 			Green, types, Reset,
 			time.Now().Format("2006-01-02 15:04:05"),
 			Green, time.Since(s.Context.StartTime), Reset,
@@ -59,7 +59,7 @@ func sendLog(s *SendMessage, types, info string) {
 	} else {
 		fmt.Fprintf(
 			os.Stderr,
-			"[SendInfo] %s%s%s | LOGTIME %s | RUNTIME %s%v%s | MSGID %s | EVENT %s%s%s | TOPIC %s%s%s | DATA %s | LOG %s\n",
+			"[SendInfo] %s %s %s | LOGTIME %s | RUNTIME %s %v %s | MSGID %s | EVENT %s %s %s | TOPIC %s %s %s | DATA %s | LOG %s\n",
 			Red, types, Reset,
 			time.Now().Format("2006-01-02 15:04:05"),
 			Green, time.Since(s.Context.StartTime), Reset,

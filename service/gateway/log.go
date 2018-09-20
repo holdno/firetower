@@ -31,7 +31,7 @@ func logError(t *FireTower, err string) {
 func towerLog(t *FireTower, types, err string) {
 	fmt.Fprintf(
 		DefaultErrorWriter,
-		"[FireTower] %s%s%s | LOGTIME %s | RUNTIME %s%v%s | MSGID %s | EVENT %s%s%s | TOPIC %s%s%s | DATA %s | LOG %s\n",
+		"[FireTower] %s %s %s | LOGTIME %s | RUNTIME %s %v %s | CONNID %d | CLIENTID %s | USERID %s | LOG %s\n",
 		socket.Green, types, socket.Reset,
 		time.Now().Format("2006-01-02 15:04:05"),
 		socket.Green, t.startTime.Format("2006-01-02 15:04:05"), socket.Reset,
@@ -48,7 +48,7 @@ func fireLog(f *FireInfo, types, info string) {
 		}
 		fmt.Fprintf(
 			DefaultWriter,
-			"[FireInfo] %s%s%s | LOGTIME %s | RUNTIME %s%v%s | MSGID %s | EVENT %s%s%s | TOPIC %s%s%s | DATA %s | LOG %s\n",
+			"[FireInfo] %s %s %s | LOGTIME %s | RUNTIME %s %v %s | MSGID %s | EVENT %s %s %s | TOPIC %s %s %s | DATA %s | LOG %s\n",
 			socket.Green, types, socket.Reset,
 			time.Now().Format("2006-01-02 15:04:05"),
 			socket.Green, time.Since(f.Context.startTime), socket.Reset,
@@ -60,8 +60,7 @@ func fireLog(f *FireInfo, types, info string) {
 	} else {
 		fmt.Fprintf(
 			DefaultErrorWriter,
-			"%s %s | LOGTIME %s | RUNTIME %v | MSGID %s | EVENT %s | TOPIC %s | DATA %s | LOG %s\n",
-			"[FireInfo]",
+			"[FireInfo] %s %s %s | LOGTIME %s | RUNTIME %s %v %s | MSGID %s | EVENT %s %s %s | TOPIC %s %s %s | DATA %s | LOG %s\n",
 			socket.Red, types, socket.Reset,
 			time.Now().Format("2006-01-02 15:04:05"),
 			socket.Green, time.Since(f.Context.startTime), socket.Reset,
