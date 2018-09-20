@@ -228,7 +228,16 @@ func (t *FireTower) Close() {
 			for k := range t.Topic {
 				topicSlice = append(topicSlice, k)
 			}
-			t.UnbindTopic(topicSlice)
+			err, delTopic := t.UnbindTopic(topicSlice)
+			fire := NewFireInfo(t, nil)
+			if err != nil {
+				fire.Panic(err.Error())
+			} else {
+				if t.unSubscribeHandler != nil {
+					t.unSubscribeHandler(fire.Context, delTopic)
+				}
+			}
+			fire.Recycling()
 		}
 		t.ws.Close()
 		close(t.closeChan)
@@ -349,6 +358,7 @@ func (t *FireTower) readDispose() {
 				if t.readHandler != nil {
 					ok := t.readHandler(fire)
 					if !ok {
+						fire.Panic("readHandler return false")
 						t.Close()
 						return
 					}
