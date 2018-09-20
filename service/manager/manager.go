@@ -52,7 +52,7 @@ func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishReque
 
 			c, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
 			if ok {
-				b, err := socket.Enpack(socket.PublishKey, request.Topic, request.Data)
+				b, err := socket.Enpack(socket.PublishKey, request.MessageId, request.Source, request.Topic, request.Data)
 				if err != nil {
 
 				}
@@ -151,7 +151,7 @@ func (m *Manager) StartGrpcService(port string) {
 
 type connectBucket struct {
 	overflow   []byte
-	packetChan chan *socket.PushMessage
+	packetChan chan *socket.SendMessage
 	conn       net.Conn
 	isClose    bool
 	closeChan  chan struct{}
@@ -175,7 +175,7 @@ func (m *Manager) StartSocketService(addr string) {
 		}
 		bucket := &connectBucket{
 			overflow:   make([]byte, 0),
-			packetChan: make(chan *socket.PushMessage, 1024),
+			packetChan: make(chan *socket.SendMessage, 1024),
 			conn:       conn,
 			isClose:    false,
 			closeChan:  make(chan struct{}),
@@ -264,30 +264,31 @@ func (c *connectBucket) sendLoop() {
 	for {
 		select {
 		case message := <-c.packetChan:
-			if message.Type == socket.PublishKey {
-				value, ok := topicRelevance.Load(message.Topic)
-				if !ok {
-					// topic 没有存在订阅列表中直接过滤
-					continue
-				} else {
-					table := value.(*list.List)
-					for e := table.Front(); e != nil; e = e.Next() {
-						bucket, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
-						if ok {
-							bytes, err := socket.Enpack(message.Type, message.Topic, message.Data)
-							if err != nil {
-								c.logError(fmt.Sprintf("protocol 封包时错误，%v", err))
-							}
-							_, err = bucket.(*connectBucket).conn.Write(bytes)
-							if err != nil {
-								// 直接操作table.Remove 可以改变map中list的值
-								bucket.(*connectBucket).close()
-								return
-							}
+
+			value, ok := topicRelevance.Load(message.Topic)
+			if !ok {
+				// topic 没有存在订阅列表中直接过滤
+				continue
+			} else {
+				table := value.(*list.List)
+				for e := table.Front(); e != nil; e = e.Next() {
+					bucket, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
+					if ok {
+						bytes, err := socket.Enpack(message.Type, message.Context.Id, message.Context.Source, message.Topic, message.Data)
+						if err != nil {
+							c.logError(fmt.Sprintf("protocol 封包时错误，%v", err))
+						}
+						_, err = bucket.(*connectBucket).conn.Write(bytes)
+						if err != nil {
+							// 直接操作table.Remove 可以改变map中list的值
+							bucket.(*connectBucket).close()
+							return
 						}
 					}
 				}
 			}
+			message.Info("topic manager sended")
+			message.Recycling()
 		case <-c.closeChan:
 			return
 		}
@@ -298,7 +299,7 @@ func (c *connectBucket) heartbeat() {
 	t := time.NewTicker(1 * time.Minute)
 	for {
 		<-t.C
-		b, _ := socket.Enpack("heartbeat", "*", []byte("heartbeat"))
+		b, _ := socket.Enpack("heartbeat", "0", "system", "*", []byte("heartbeat"))
 		_, err := c.conn.Write(b)
 		if err != nil {
 			c.close()

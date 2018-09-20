@@ -54,6 +54,8 @@ message UnSubscribeTopicResponse {
 message PublishRequest {
     string Topic = 1;
     bytes Data = 2;
+    string MessageId = 3;
+    string Source = 4;
 }
 
 message PublishResponse {

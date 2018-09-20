@@ -2,13 +2,12 @@ package gateway
 
 import (
 	"errors"
+	"github.com/holdno/firetower/socket"
 	"sync"
 	"sync/atomic"
 )
 
-var (
-	TM *TowerManager
-)
+var TM *TowerManager
 
 var (
 	ErrorTopicEmpty = errors.New("topic is empty")
@@ -16,21 +15,21 @@ var (
 
 type TowerManager struct {
 	bucket      []*Bucket
-	centralChan chan *SendMessage // 中心处理队列
+	centralChan chan *socket.SendMessage // 中心处理队列
 }
 
 type Bucket struct {
 	mu             sync.RWMutex // 读写锁，可并发读不可并发读写
 	id             int64
 	topicRelevance map[string]map[string]*FireTower // topic -> websocket clientid -> websocket conn
-	BuffChan       chan *SendMessage                // bucket的消息处理队列
+	BuffChan       chan *socket.SendMessage         // bucket的消息处理队列
 }
 
 func buildBuckets() {
 	bucketNum := int(ConfigTree.Get("bucket.Num").(int64))
 	TM = &TowerManager{
 		bucket:      make([]*Bucket, bucketNum),
-		centralChan: make(chan *SendMessage, ConfigTree.Get("bucket.CentralChanCount").(int64)),
+		centralChan: make(chan *socket.SendMessage, ConfigTree.Get("bucket.CentralChanCount").(int64)),
 	}
 
 	for i := 0; i < bucketNum; i++ {
@@ -54,7 +53,7 @@ func newBucket() *Bucket {
 	b := &Bucket{
 		id:             getNewBucketId(),
 		topicRelevance: make(map[string]map[string]*FireTower),
-		BuffChan:       make(chan *SendMessage, ConfigTree.Get("bucket.BuffChanCount").(int64)),
+		BuffChan:       make(chan *socket.SendMessage, ConfigTree.Get("bucket.BuffChanCount").(int64)),
 	}
 
 	ConsumerNum := int(ConfigTree.Get("bucket.ConsumerNum").(int64))
@@ -120,7 +119,7 @@ func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 }
 
 // 桶内进行遍历push
-func (b *Bucket) Push(message *SendMessage) error {
+func (b *Bucket) Push(message *socket.SendMessage) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if m, ok := b.topicRelevance[message.Topic]; ok {

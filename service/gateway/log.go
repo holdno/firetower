@@ -2,11 +2,20 @@ package gateway
 
 import (
 	"fmt"
+	"github.com/holdno/firetower/socket"
+	"io"
+	"os"
 	"time"
 )
 
-const (
-	prefix = "[firetower]"
+var (
+	// Log Level 支持三种模式
+	// INFO 打印所有日志信息
+	// WARN 只打印警告及错误类型的日志信息
+	// ERROR 只打印错误日志
+	LogLevel                     = "INFO"
+	DefaultWriter      io.Writer = os.Stdout
+	DefaultErrorWriter io.Writer = os.Stderr
 )
 
 // 打印日志信息
@@ -22,11 +31,10 @@ func logError(t *FireTower, err string) {
 func towerLog(t *FireTower, types, err string) {
 	fmt.Fprintf(
 		DefaultErrorWriter,
-		"%s %s | LOGTIME %s | STARTTIME %s | CONNID %d | CLIENTID %s | USERID %s | INFO %s\n",
-		"[FireTower]",
-		types,
+		"[FireTower] %s%s%s | LOGTIME %s | RUNTIME %s%v%s | MSGID %s | EVENT %s%s%s | TOPIC %s%s%s | DATA %s | LOG %s\n",
+		socket.Green, types, socket.Reset,
 		time.Now().Format("2006-01-02 15:04:05"),
-		t.startTime.Format("2006-01-02 15:04:05"),
+		socket.Green, t.startTime.Format("2006-01-02 15:04:05"), socket.Reset,
 		t.connId,
 		t.ClientId,
 		t.UserId,
@@ -40,25 +48,26 @@ func fireLog(f *FireInfo, types, info string) {
 		}
 		fmt.Fprintf(
 			DefaultWriter,
-			"%s %s | LOGTIME %s | RUNTIME %v | EVENT %s | TOPIC %s | DATA %s | LOG %s\n",
-			"[FireInfo]",
-			types,
+			"[FireInfo] %s%s%s | LOGTIME %s | RUNTIME %s%v%s | MSGID %s | EVENT %s%s%s | TOPIC %s%s%s | DATA %s | LOG %s\n",
+			socket.Green, types, socket.Reset,
 			time.Now().Format("2006-01-02 15:04:05"),
-			time.Since(f.Context.startTime),
-			f.Message.Type,
-			f.Message.Topic,
+			socket.Green, time.Since(f.Context.startTime), socket.Reset,
+			f.Context.id,
+			socket.Yellow, f.Message.Type, socket.Reset,
+			socket.Cyan, f.Message.Topic, socket.Reset,
 			string(f.Message.Data),
 			info)
 	} else {
 		fmt.Fprintf(
 			DefaultErrorWriter,
-			"%s %s | LOGTIME %s | RUNTIME %v | EVENT %s | TOPIC %s | DATA %s | LOG %s\n",
+			"%s %s | LOGTIME %s | RUNTIME %v | MSGID %s | EVENT %s | TOPIC %s | DATA %s | LOG %s\n",
 			"[FireInfo]",
-			types,
+			socket.Red, types, socket.Reset,
 			time.Now().Format("2006-01-02 15:04:05"),
-			time.Since(f.Context.startTime),
-			f.Message.Type,
-			f.Message.Topic,
+			socket.Green, time.Since(f.Context.startTime), socket.Reset,
+			f.Context.id,
+			socket.Yellow, f.Message.Type, socket.Reset,
+			socket.Cyan, f.Message.Topic, socket.Reset,
 			string(f.Message.Data),
 			info)
 	}

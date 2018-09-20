@@ -98,45 +98,44 @@ tower.SetReadTimeoutHandler(func(fire *gateway.FireInfo) {
 
 - BeforeSubscribeHandler 客户端订阅某些topic时触发(这个时候topic还没有订阅，是before subscribe)
 ``` golang
-tower.SetBeforeSubscribeHandler(func(topic []string) bool {
+tower.SetBeforeSubscribeHandler(func(context *gateway.FireLife, topic []string) bool {
     // 这里用来判断当前用户是否允许订阅该topic
-    return true // 返回true则进行正常流程 false则终止
+    return true
 })
 ```
 
 - SubscribeHandler 客户端完成某些topic的订阅时触发(topic已经被topicService收录并管理)
 ``` golang
-tower.SetSubscribeHandler(func(topic []string) bool {
+tower.SetSubscribeHandler(func(context *gateway.FireLife, topic []string) bool {
     // 我们给出的聊天室示例是需要用到这个回调方法
     // 当某个聊天室(topic)有新的订阅者，则需要通知其他已经在聊天室内的成员当前在线人数+1
     for _, v := range topic {
         num := tower.GetConnectNum(v)
-
-        var pushmsg = new(gateway.TopicMessage)
-        pushmsg.Topic = v
-        pushmsg.Data = []byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num))
+        // 继承订阅消息的context
+        var pushmsg = gateway.NewFireInfo(tower, context)
+        pushmsg.Message.Topic = v
+        pushmsg.Message.Data = []byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num))
         tower.Publish(pushmsg)
     }
-    return true // 返回true则进行正常流程 false则终止
+    return true
 })
 ```
 
 - UnSubscribeHandler 客户端取消订阅某些topic完成时触发 (这个回调方法没有设置before方法，目前没有想到什么场景会使用到before unsubscribe，如果有请issue联系)
 ``` golang
-tower.SetUnSubscribeHandler(func(topic []string) bool {
-    // 当某个聊天室(topic)有人退出，则需要通知其他已经在聊天室内的成员当前在线人数-1
+tower.SetUnSubscribeHandler(func(context *gateway.FireLife, topic []string) bool {
     for _, v := range topic {
         num := tower.GetConnectNum(v)
-        var pushmsg = new(gateway.TopicMessage)
-        pushmsg.Topic = v
-        pushmsg.Data = []byte(fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num))
+        var pushmsg = gateway.NewFireInfo(tower, context)
+        pushmsg.Message.Topic = v
+        pushmsg.Message.Data = []byte(fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num))
         tower.Publish(pushmsg)
     }
-
     return true
 })
 ```
 注意：当客户端断开websocket连接时firetower会将其在线时订阅的所有topic进行退订 会触发UnSubscirbeHandler  
 
 ## TODO
-小包合并大包，减少发送频率    
+- 运行时web看板  
+- 管理后台(人工推送等)     

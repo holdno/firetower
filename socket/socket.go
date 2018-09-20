@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -18,7 +19,7 @@ type TcpClient struct {
 	isClose   bool
 	closeChan chan struct{}
 	Conn      net.Conn
-	readIn    chan *PushMessage
+	readIn    chan *SendMessage
 	sendOut   chan []byte
 }
 
@@ -29,16 +30,57 @@ type TopicEvent struct {
 }
 
 type PushMessage struct {
-	Topic string `json:"topic"`
-	Data  []byte `json:"data"`
-	Type  string `json:"type"`
+	MessageId string `json:"message_id"`
+	Source    string `json:"source"`
+	Topic     string `json:"topic"`
+	Data      []byte `json:"data"`
+	Type      string `json:"type"`
+}
+
+// 发送的消息结构体
+// 发送不用限制用户消息内容的格式
+type SendMessage struct {
+	Context     *sendLife
+	Type        string
+	MessageType int
+	Data        []byte
+	Topic       string
+}
+
+type sendLife struct {
+	StartTime time.Time
+	Id        string
+	Source    string
+}
+
+var (
+	sendPool sync.Pool
+)
+
+// id 记录消息id
+// source 记录这条信息是用户推送还是平台推送 user | platform
+func GetSendMessage(id, source string) *SendMessage {
+	sendMessage := sendPool.Get().(*SendMessage)
+	sendMessage.Context.StartTime = time.Now()
+	sendMessage.Context.Id = id
+	sendMessage.Context.Source = source
+	return sendMessage
+}
+
+func init() {
+	sendPool.New = func() interface{} {
+		return &SendMessage{
+			Context: new(sendLife),
+		}
+	}
+	SendLogger = sendLog
 }
 
 func NewClient(address string) *TcpClient {
 	return &TcpClient{
 		Address: address,
 		isClose: false,
-		readIn:  make(chan *PushMessage, 1024),
+		readIn:  make(chan *SendMessage, 1024),
 		sendOut: make(chan []byte, 1024),
 	}
 }
@@ -116,7 +158,7 @@ func (t *TcpClient) Close() {
 	}
 }
 
-func (t *TcpClient) Read() (*PushMessage, error) {
+func (t *TcpClient) Read() (*SendMessage, error) {
 	if t.isClose {
 		return nil, ErrorClose
 	}
@@ -175,15 +217,15 @@ func (t *TcpClient) DelTopic(topic []string) error {
 	}
 }
 
-func (t *TcpClient) Publish(topic string, data json.RawMessage) error {
-	b, err := Enpack(PublishKey, topic, data)
+func (t *TcpClient) Publish(messageId, source, topic string, data json.RawMessage) error {
+	b, err := Enpack(PublishKey, messageId, source, topic, data)
 	if err != nil {
 		return err
 	}
 	return t.send(b)
 }
 
-func (t *TcpClient) OnPush(fn func(topic string, message []byte)) {
+func (t *TcpClient) OnPush(fn func(message *SendMessage)) {
 	go func() {
 		for {
 			message, err := t.Read()
@@ -192,7 +234,7 @@ func (t *TcpClient) OnPush(fn func(topic string, message []byte)) {
 				// 只可能是连接断开了
 				return
 			}
-			fn(message.Topic, message.Data)
+			fn(message)
 		}
 	}()
 }

@@ -65,16 +65,16 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 
-	tower.SetBeforeSubscribeHandler(func(topic []string) bool {
+	tower.SetBeforeSubscribeHandler(func(context *gateway.FireLife, topic []string) bool {
 		// 这里用来判断当前用户是否允许订阅该topic
 		return true
 	})
 
-	tower.SetSubscribeHandler(func(topic []string) bool {
+	tower.SetSubscribeHandler(func(context *gateway.FireLife, topic []string) bool {
 		for _, v := range topic {
 			num := tower.GetConnectNum(v)
-
-			var pushmsg = gateway.GetFireInfo(tower)
+			// 继承订阅消息的context
+			var pushmsg = gateway.NewFireInfo(tower, context)
 			pushmsg.Message.Topic = v
 			pushmsg.Message.Data = []byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num))
 			tower.Publish(pushmsg)
@@ -82,10 +82,10 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		return true
 	})
 
-	tower.SetUnSubscribeHandler(func(topic []string) bool {
+	tower.SetUnSubscribeHandler(func(context *gateway.FireLife, topic []string) bool {
 		for _, v := range topic {
 			num := tower.GetConnectNum(v)
-			var pushmsg = gateway.GetFireInfo(tower)
+			var pushmsg = gateway.NewFireInfo(tower, context)
 			pushmsg.Message.Topic = v
 			pushmsg.Message.Data = []byte(fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num))
 			tower.Publish(pushmsg)

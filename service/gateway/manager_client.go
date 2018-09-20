@@ -25,12 +25,8 @@ func BuildManagerClient() {
 		if err != nil {
 			panic(fmt.Sprintf("[manager client] can not get local IP, error:%v", err))
 		}
-		topicManage.OnPush(func(topic string, message []byte) {
-			TM.centralChan <- &SendMessage{
-				MessageType: 1,
-				Data:        message,
-				Topic:       topic,
-			}
+		topicManage.OnPush(func(sendMessage *socket.SendMessage) {
+			TM.centralChan <- sendMessage
 		})
 		err = topicManage.Connect()
 		if err != nil {

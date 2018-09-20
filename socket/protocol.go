@@ -19,7 +19,7 @@ const (
 // header+messageLength+[pushType]+ConstSplitSpace+[topic]+ConstNewLine+[content]
 // |      header       |           type           |       params       |  body  |
 // 封包
-func Enpack(pushType, topic string, content []byte) ([]byte, error) {
+func Enpack(pushType, messageId, source, topic string, content []byte) ([]byte, error) {
 	if pushType == "" {
 		return nil, errors.New("type is empty")
 	}
@@ -33,6 +33,10 @@ func Enpack(pushType, topic string, content []byte) ([]byte, error) {
 	// data = pushType+ConstSplitSpace+topic+ConstSplitSpace+content
 	res := []byte(pushType)
 	res = append(res, []byte(ConstSplitSpace)...)
+	res = append(res, []byte(messageId)...)
+	res = append(res, []byte(ConstSplitSpace)...)
+	res = append(res, []byte(source)...)
+	res = append(res, []byte(ConstSplitSpace)...)
 	res = append(res, []byte(topic)...)
 	res = append(res, ConstNewLine)
 	res = append(res, content...)
@@ -40,7 +44,7 @@ func Enpack(pushType, topic string, content []byte) ([]byte, error) {
 }
 
 //解包
-func Depack(buffer []byte, readerChannel chan *PushMessage) ([]byte, error) {
+func Depack(buffer []byte, readerChannel chan *SendMessage) ([]byte, error) {
 	length := len(buffer)
 	var (
 		i   int
@@ -60,8 +64,10 @@ func Depack(buffer []byte, readerChannel chan *PushMessage) ([]byte, error) {
 			data := buffer[i+ConstHeaderLength+ConstIntLength : i+ConstHeaderLength+ConstIntLength+messageLength]
 			reader := bufio.NewReader(bytes.NewReader(data))
 			// params[0] = pushType
-			// params[1] = topic
-			// params[2] = content
+			// params[1] = messageId
+			// params[2] = source
+			// params[3] = topic
+			// params[4] = content
 			var (
 				params  [][]byte
 				content = make([]byte, messageLength)
@@ -84,11 +90,11 @@ func Depack(buffer []byte, readerChannel chan *PushMessage) ([]byte, error) {
 				err = errors.New("包解析出错")
 				goto Error
 			}
-			readerChannel <- &PushMessage{
-				Type:  string(params[0]),
-				Topic: string(params[1]),
-				Data:  params[2],
-			}
+			sendMessage := GetSendMessage(string(params[1]), string(params[2]))
+			sendMessage.Type = string(params[0])
+			sendMessage.Topic = string(params[3])
+			sendMessage.Data = params[4]
+			readerChannel <- sendMessage
 		}
 	}
 	if i == length {
