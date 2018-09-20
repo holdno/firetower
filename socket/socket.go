@@ -230,7 +230,7 @@ func (t *TcpClient) OnPush(fn func(message *SendMessage)) {
 		for {
 			message, err := t.Read()
 			if err != nil {
-				fmt.Println(err)
+				message.Panic(err.Error())
 				// 只可能是连接断开了
 				return
 			}

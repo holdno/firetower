@@ -44,6 +44,8 @@ func buildBuckets() {
 				for i := 0; i < bucketNum; i++ {
 					TM.bucket[i].BuffChan <- message
 				}
+				message.Info("Sended")
+				message.Recycling()
 			}
 		}
 	}()

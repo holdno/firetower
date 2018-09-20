@@ -111,11 +111,41 @@ input, button {
 
 .add-room {
 	float: right;
+	cursor: pointer;
 }
 
 .dialog {
 	opacity: 0;
 	transition: .5s;
+}
+
+.dialog .fire-modal-wrap {
+	position: fixed;
+	overflow: auto;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	z-index: 1000;
+	-webkit-overflow-scrolling: touch;
+	outline: 0;
+}
+
+.dialog .dialog-content {
+	position: fixed;
+	right: 0;
+	left: 0;
+	top: 150px;
+	margin: 0 auto;
+	z-index: 1001;
+	width: 80%;
+	background: #fff;
+	border-radius: 10px;
+	overflow: hidden;
+	box-sizing: border-box;
+	padding: 16px;
+	font-size: 12px;
+	line-height: 1.5;
 }
 
 .dialog .mask {
@@ -124,30 +154,10 @@ input, button {
 	right: 0;
 	left: 0;
 	bottom: 0;
-	margin: auto;
 	z-index: 1000;
 	width: 100%;
 	height: 100%;
 	background: rgba(55,55,55,.6);
-}
-
-.dialog .dialog-content {
-	position: fixed;
-	top: 0;
-	right: 0;
-	left: 0;
-	bottom: 0;
-	margin: auto;
-	z-index: 1001;
-	width: 80%;
-	height: 25%;
-	background: #fff;
-	border-radius: 10px;
-	overflow: hidden;
-	box-sizing: border-box;
-	padding: 16px;
-	font-size: 12px;
-	line-height: 1.5;
 }
 
 .dialog-hidden {
@@ -189,6 +199,8 @@ input, button {
 	margin-top: 20px;
   text-align: right;
 }
+
+
 
 .fire-button-default {
 	color: #515a6e;
@@ -247,22 +259,24 @@ input, button {
 	</div>
 
 	<div class="dialog dialog-hidden" id="dialog">
-		<div class="mask" id="dialogMask"></div>
-		<div class="dialog-content">
-			<div class="dialog-title">
-				<!-- <input value="" placeholder="房间名" id="changeRoomName"/> -->
-				<div class="input-body">
-					<label class="label" for="changeRoomNum">房间号:</label>
-					<input
-						value=""
-						type="number"
-						id="changeRoomNum"
-						class="fire-input"
-						placeholder="请输入房间号"
-					/>
-				</div>
-				<div class="dialog-footer">
-					<button onclick="changeRoom()" class="fire-button fire-button-primary">切换</button>
+		<div class="fire-modal-wrap">
+			<div class="mask" id="dialogMask"></div>
+			<div class="dialog-content">
+				<div class="dialog-title">
+					<!-- <input value="" placeholder="房间名" id="changeRoomName"/> -->
+					<div class="input-body">
+						<label class="label" for="changeRoomNum">房间号:</label>
+						<input
+							value=""
+							type="number"
+							id="changeRoomNum"
+							class="fire-input"
+							placeholder="请输入房间号"
+						/>
+					</div>
+					<div class="dialog-footer">
+						<button onclick="changeRoom()" class="fire-button fire-button-primary">切换</button>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -399,7 +413,7 @@ input, button {
 		dialogDom.style.opacity = 0
 		setTimeout(() => {
 			dialogDom.className += ' dialog-hidden'
-		}, 500)
+		}, 300)
 	}
 
 	// 切换房间

@@ -247,8 +247,6 @@ func (t *FireTower) sendLoop() {
 				message.Panic(err.Error())
 				goto collapse
 			}
-			message.Info("Sended")
-			message.Recycling()
 		case <-heartTicker.C:
 			sendMessage := socket.GetSendMessage("0", "system")
 			sendMessage.MessageType = websocket.TextMessage
