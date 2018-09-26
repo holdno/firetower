@@ -139,3 +139,6 @@ tower.SetUnSubscribeHandler(func(context *gateway.FireLife, topic []string) bool
 ## TODO
 - 运行时web看板  
 - 管理后台(人工推送等)     
+
+## License  
+[MIT](https://opensource.org/licenses/MIT)
