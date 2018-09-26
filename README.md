@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build Status">
   <img src="https://img.shields.io/badge/package%20utilities-go modules-blue.svg" alt="Package Utilities">
   <img src="https://img.shields.io/badge/golang-1.11.0-%23ff69b4.svg" alt="Version">
-  <img src="https://img.shields.io/badge/issue-waiting-red.svg" alt="Issue">
+  <img src="https://img.shields.io/badge/license-MIT-brightgreen.svg" alt="license">
 </p>
 <h1 align="center">Firetower</h2>
 firetower是一个可分布式部署的推送服务  
