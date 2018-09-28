@@ -3,15 +3,16 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/gorilla/websocket"
 	pb "github.com/holdno/firetower/grpc/manager"
 	"github.com/holdno/firetower/socket"
 	"github.com/holdno/snowFlakeByGo"
 	json "github.com/json-iterator/go"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
 )
 
 var (
@@ -131,6 +132,7 @@ func Init() {
 	BuildManagerClient()          // 构建连接manager(topic管理服务)的客户端
 }
 
+// 实例化一个websocket客户端
 func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
 	if TopicManageGrpc == nil {
 		panic("please confirm gateway was inited")
@@ -149,6 +151,7 @@ func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
 	return
 }
 
+// 启动websocket客户端
 func (t *FireTower) Run() {
 	logInfo(t, "new websocket running")
 	// 读取websocket信息
@@ -159,7 +162,8 @@ func (t *FireTower) Run() {
 	t.sendLoop()
 }
 
-func (t *FireTower) BindTopic(topic []string) (error, []string) {
+// 订阅topic的绑定过程
+func (t *FireTower) bindTopic(topic []string) (error, []string) {
 	var (
 		addTopic []string
 	)
@@ -182,7 +186,7 @@ func (t *FireTower) BindTopic(topic []string) (error, []string) {
 	return nil, addTopic
 }
 
-func (t *FireTower) UnbindTopic(topic []string) (error, []string) {
+func (t *FireTower) unbindTopic(topic []string) (error, []string) {
 	var delTopic []string // 待取消订阅的topic列表
 	bucket := TM.GetBucket(t)
 	for _, v := range topic {
@@ -220,6 +224,8 @@ func (t *FireTower) Send(message *socket.SendMessage) error {
 	return nil
 }
 
+// 关闭客户端连接并注销
+// 调用该方法会完全注销掉由BuildTower生成的一切内容
 func (t *FireTower) Close() {
 	logInfo(t, "websocket connect is closed")
 	t.mutex.Lock()
@@ -231,7 +237,7 @@ func (t *FireTower) Close() {
 			for k := range t.Topic {
 				topicSlice = append(topicSlice, k)
 			}
-			err, delTopic := t.UnbindTopic(topicSlice)
+			err, delTopic := t.unbindTopic(topicSlice)
 			fire := NewFireInfo(t, nil)
 			if err != nil {
 				fire.Panic(err.Error())
@@ -332,7 +338,7 @@ func (t *FireTower) readDispose() {
 					}
 				}
 				// 增加messageId 方便追踪
-				err, addTopic = t.BindTopic(addTopic)
+				err, addTopic = t.bindTopic(addTopic)
 				if err != nil {
 					fire.Error(err.Error())
 				} else {
@@ -346,7 +352,7 @@ func (t *FireTower) readDispose() {
 					continue
 				}
 				delTopic := strings.Split(fire.Message.Topic, ",")
-				err, delTopic = t.UnbindTopic(delTopic)
+				err, delTopic = t.unbindTopic(delTopic)
 				if err != nil {
 					fire.Error(err.Error())
 				} else {
@@ -388,26 +394,20 @@ func (t *FireTower) readDispose() {
 //	}
 //}
 
+// 推送接口
+// 通过BuildTower生成的实例都可以调用该方法来达到推送的目的
 func (t *FireTower) Publish(fire *FireInfo) error {
 	err := topicManage.Publish(fire.Context.id, "user", fire.Message.Topic, fire.Message.Data)
 	if err != nil {
 		fire.Panic(fmt.Sprintf("publish err: %v", err))
 		return err
 	}
-	//res, err := TopicManageGrpc.Publish(context.Background(), &pb.PublishRequest{
-	//	Topic: message.Topic,
-	//	Data:  message.Data,
-	//})
-	//if err != nil {
-	//	t.LogError(fmt.Sprintf("Publish Error, Topic:%s,Data:%s; error:%v", message.Topic, string(message.Data), err))
-	//	return false
-	//} else {
-	//	// TODO 发送失败
-	//	return res.Ok
-	//}
 	return nil
 }
 
+// 向自己推送消息
+// 这里描述一下使用场景
+// 只针对当前客户端进行的推送请调用该方法
 func (t *FireTower) ToSelf(b []byte) error {
 	if t.isClose != true {
 		err := t.ws.WriteMessage(1, b)
@@ -417,32 +417,37 @@ func (t *FireTower) ToSelf(b []byte) error {
 	}
 }
 
+// 客户端推送事件
 // 接收到用户publish的消息时触发
 func (t *FireTower) SetReadHandler(fn func(*FireInfo) bool) {
 	t.readHandler = fn
 }
 
+// 订阅事件
 // 用户订阅topic后触发
 func (t *FireTower) SetSubscribeHandler(fn func(context *FireLife, topic []string) bool) {
 	t.subscribeHandler = fn
 }
 
+// 取消订阅事件
 // 用户取消订阅topic后触发
 func (t *FireTower) SetUnSubscribeHandler(fn func(context *FireLife, topic []string) bool) {
 	t.unSubscribeHandler = fn
 }
 
+// 订阅前回调事件
 // 用户订阅topic前触发
 func (t *FireTower) SetBeforeSubscribeHandler(fn func(context *FireLife, topic []string) bool) {
 	t.beforeSubscribeHandler = fn
 }
 
+// 超时回调
 // readIn channal写满了  生产 > 消费的情况下触发超时机制
 func (t *FireTower) SetReadTimeoutHandler(fn func(*FireInfo)) {
 	t.readTimeoutHandler = fn
 }
 
-// grpc方法封装
+// 获取话题订阅数的grpc方法封装
 func (t *FireTower) GetConnectNum(topic string) int64 {
 	res, err := TopicManageGrpc.GetConnectNum(context.Background(), &pb.GetConnectNumRequest{Topic: topic})
 	if err != nil {

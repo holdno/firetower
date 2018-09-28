@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
+	"strconv"
+
 	"github.com/gorilla/websocket"
 	"github.com/holdno/firetower/service/gateway"
 	"github.com/holdno/snowFlakeByGo"
 	json "github.com/json-iterator/go"
-	"net/http"
-	_ "net/http/pprof"
-	"strconv"
 )
 
 var upgrader = websocket.Upgrader{
@@ -26,6 +27,7 @@ type messageInfo struct {
 var GlobalIdWorker *snowFlakeByGo.Worker
 
 func main() {
+	// 全局唯一id生成器
 	GlobalIdWorker, _ = snowFlakeByGo.NewWorker(1)
 	// 如果是集群环境  一定一定要给每个服务设置唯一的id
 	// 取值范围 1-1024
@@ -36,6 +38,7 @@ func main() {
 	http.ListenAndServe("0.0.0.0:9999", nil)
 }
 
+// http转websocket连接 并实例化firetower
 func Websocket(w http.ResponseWriter, r *http.Request) {
 	// 做用户身份验证
 

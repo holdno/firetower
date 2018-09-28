@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/holdno/firetower/service/manager"
 	"github.com/pelletier/go-toml"
 )
 
+// 配置信息
 var ConfigTree *toml.Tree
 
 func init() {

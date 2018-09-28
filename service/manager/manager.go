@@ -39,7 +39,11 @@ type topicGrpcService struct {
 	mu sync.RWMutex
 }
 
-// Publish
+// 推送的grpc接口
+// request *pb.PublishRequest
+// 接收 Topic 话题
+//     Data  传输内容
+//     MessageId gateway 来源的消息id
 func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishRequest) (*pb.PublishResponse, error) {
 	Logger("INFO", fmt.Sprintf("new message: %s", string(request.Data)))
 
@@ -70,7 +74,7 @@ func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishReque
 	return &pb.PublishResponse{Ok: true}, nil
 }
 
-// 获取topic订阅数
+// 获取topic订阅数的grpc接口
 func (t *topicGrpcService) GetConnectNum(ctx context.Context, request *pb.GetConnectNumRequest) (*pb.GetConnectNumResponse, error) {
 	value, ok := topicRelevance.Load(request.Topic)
 	var num int64
@@ -83,7 +87,7 @@ func (t *topicGrpcService) GetConnectNum(ctx context.Context, request *pb.GetCon
 	return &pb.GetConnectNumResponse{Number: num}, nil
 }
 
-// topic 订阅
+// 订阅topic的grpc接口
 func (t *topicGrpcService) SubscribeTopic(ctx context.Context, request *pb.SubscribeTopicRequest) (*pb.SubscribeTopicResponse, error) {
 	for _, topic := range request.Topic {
 		var store *list.List
@@ -109,7 +113,7 @@ func (t *topicGrpcService) SubscribeTopic(ctx context.Context, request *pb.Subsc
 	return &pb.SubscribeTopicResponse{}, nil
 }
 
-// topic 取消订阅
+// 取消订阅topic的grpc接口
 func (t *topicGrpcService) UnSubscribeTopic(ctx context.Context, request *pb.UnSubscribeTopicRequest) (*pb.UnSubscribeTopicResponse, error) {
 	for _, topic := range request.Topic {
 		value, ok := topicRelevance.Load(topic)
@@ -138,6 +142,8 @@ func (t *topicGrpcService) UnSubscribeTopic(ctx context.Context, request *pb.UnS
 	return &pb.UnSubscribeTopicResponse{}, nil
 }
 
+// 启动grpc服务
+// 包含 话题订阅 与 取消订阅 推送等
 func (m *Manager) StartGrpcService(port string) {
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
@@ -158,6 +164,8 @@ type connectBucket struct {
 	mu         sync.Mutex
 }
 
+// 启动tcp服务
+// 主要用来接收gateway的推送消息
 func (m *Manager) StartSocketService(addr string) {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {

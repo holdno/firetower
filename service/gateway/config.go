@@ -2,9 +2,11 @@ package gateway
 
 import (
 	"fmt"
+
 	"github.com/pelletier/go-toml"
 )
 
+// 每个连接的配置信息
 type FireTowerConfig struct {
 	chanLens         int
 	heartbeat        int

@@ -2,14 +2,17 @@ package gateway
 
 import (
 	"errors"
-	"github.com/holdno/firetower/socket"
 	"sync"
 	"sync/atomic"
+
+	"github.com/holdno/firetower/socket"
 )
 
-var TM *TowerManager
-
+// TowerManager是一个实例的管理中心
+// 包含中心处理队列和多个bucket
+// bucket的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
 var (
+	TM              *TowerManager
 	ErrorTopicEmpty = errors.New("topic is empty")
 )
 
@@ -98,6 +101,7 @@ func (b *Bucket) consumer() {
 	}
 }
 
+// 添加当前实例中的topic->conn的订阅关系
 func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
 	b.mu.Lock()
 	if m, ok := b.topicRelevance[topic]; ok {
@@ -109,6 +113,7 @@ func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
 	b.mu.Unlock()
 }
 
+// 删除当前实例中的topic->conn的订阅关系
 func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 	b.mu.Lock()
 	if m, ok := b.topicRelevance[topic]; ok {
@@ -121,6 +126,9 @@ func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 }
 
 // 桶内进行遍历push
+// 每个bucket有一个Push方法
+// 在推送时每个bucket同时调用Push方法 来达到并发推送
+// 该方法主要通过遍历桶中的topic->conn订阅关系来进行websocket写入
 func (b *Bucket) Push(message *socket.SendMessage) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()

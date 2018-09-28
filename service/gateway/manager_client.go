@@ -2,12 +2,14 @@ package gateway
 
 import (
 	"fmt"
+	"time"
+
 	pb "github.com/holdno/firetower/grpc/manager"
 	"github.com/holdno/firetower/socket"
 	"google.golang.org/grpc"
-	"time"
 )
 
+// 实例化一个与topicManager连接的tcp链接
 func BuildManagerClient() {
 	go func() {
 
