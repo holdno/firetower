@@ -22,7 +22,7 @@ var (
 	// ClusterId 当前实例在集群中的唯一id
 	ClusterId int64 = 1
 
-	// 默认配置文件读取路径
+	// DefaultConfigPath 默认配置文件读取路径
 	DefaultConfigPath = "./fireTower.toml"
 	// TowerLogger 接管系统log t log类型 info log信息
 	TowerLogger func(t *FireTower, types, info string)
@@ -225,6 +225,8 @@ func (t *FireTower) read() (*FireInfo, error) {
 	return message, nil
 }
 
+// Send 发送消息方法
+// 向某个topic发送某段信息
 func (t *FireTower) Send(message *socket.SendMessage) error {
 	if t.isClose {
 		return ErrorClose
@@ -329,10 +331,9 @@ func (t *FireTower) readDispose() {
 			fire.Panic(fmt.Sprintf("read message failed:%v", err))
 			t.Close()
 			return
+		} else if t.isClose {
+			return
 		} else {
-			if t.isClose {
-				return
-			}
 			switch fire.Message.Type {
 			case "subscribe": // 客户端订阅topic
 				if fire.Message.Topic == "" {
@@ -402,8 +403,11 @@ func (t *FireTower) Publish(fire *FireInfo) error {
 // 只针对当前客户端进行的推送请调用该方法
 func (t *FireTower) ToSelf(b []byte) error {
 	if t.isClose != true {
-		err := t.ws.WriteMessage(1, b)
-		return err
+		if err := t.ws.WriteMessage(1, b); err != nil {
+			return err
+		} else {
+			return nil
+		}
 	} else {
 		return ErrorClose
 	}
