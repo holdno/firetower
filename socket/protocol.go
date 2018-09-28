@@ -75,6 +75,7 @@ func Depack(buffer []byte, readerChannel chan *SendMessage) ([]byte, error) {
 				params  [][]byte
 				param   []byte
 				content = make([]byte, messageLength)
+				n       int
 			)
 
 			param, _, err = reader.ReadLine()
@@ -83,7 +84,7 @@ func Depack(buffer []byte, readerChannel chan *SendMessage) ([]byte, error) {
 			}
 
 			params = bytes.Split(param, []byte(ConstSplitSpace))
-			n, err := reader.Read(content)
+			n, err = reader.Read(content)
 			if err != nil {
 				break
 			}
