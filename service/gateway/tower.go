@@ -334,12 +334,12 @@ func (t *FireTower) readDispose() {
 		} else if t.isClose {
 			return
 		} else {
+			if fire.Message.Topic == "" {
+				fire.Panic(fmt.Sprintf("%s:topic is empty, ClintId:%s, UserId:%s", fire.Message.Type, t.ClientId, t.UserId))
+				continue
+			}
 			switch fire.Message.Type {
 			case "subscribe": // 客户端订阅topic
-				if fire.Message.Topic == "" {
-					fire.Panic(fmt.Sprintf("onSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
-					continue
-				}
 				addTopic := strings.Split(fire.Message.Topic, ",")
 				// 如果设置了订阅前触发事件则调用
 				if t.beforeSubscribeHandler != nil {
@@ -352,24 +352,17 @@ func (t *FireTower) readDispose() {
 				addTopic, err = t.bindTopic(addTopic)
 				if err != nil {
 					fire.Error(err.Error())
-				} else {
-					if t.subscribeHandler != nil {
-						t.subscribeHandler(fire.Context, addTopic)
-					}
+				} else if t.subscribeHandler != nil {
+					t.subscribeHandler(fire.Context, addTopic)
+
 				}
 			case "unSubscribe": // 客户端取消订阅topic
-				if fire.Message.Topic == "" {
-					fire.Panic(fmt.Sprintf("unOnSubscribe:topic is empty, ClintId:%s, UserId:%s", t.ClientId, t.UserId))
-					continue
-				}
 				delTopic := strings.Split(fire.Message.Topic, ",")
 				delTopic, err = t.unbindTopic(delTopic)
 				if err != nil {
 					fire.Error(err.Error())
-				} else {
-					if t.unSubscribeHandler != nil {
-						t.unSubscribeHandler(fire.Context, delTopic)
-					}
+				} else if t.unSubscribeHandler != nil {
+					t.unSubscribeHandler(fire.Context, delTopic)
 				}
 			default:
 				if t.readHandler != nil {
