@@ -2,19 +2,22 @@ package gateway
 
 import (
 	"fmt"
-	"github.com/holdno/firetower/socket"
 	"io"
 	"os"
 	"time"
+
+	"github.com/holdno/firetower/socket"
 )
 
 var (
-	// Log Level 支持三种模式
+	// LogLevel Log Level 支持三种模式
 	// INFO 打印所有日志信息
 	// WARN 只打印警告及错误类型的日志信息
 	// ERROR 只打印错误日志
-	LogLevel                     = "INFO"
-	DefaultWriter      io.Writer = os.Stdout
+	LogLevel = "INFO"
+	// DefaultWriter 正常日志的默认写入方式
+	DefaultWriter io.Writer = os.Stdout
+	// DefaultErrorWriter 错误日志的默认写入方式
 	DefaultErrorWriter io.Writer = os.Stderr
 )
 

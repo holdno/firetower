@@ -10,11 +10,11 @@ import (
 )
 
 const (
-	// 与前端(客户端约定的推送关键字)
+	// PublishKey 与前端(客户端约定的推送关键字)
 	PublishKey = "publish"
 )
 
-// tcp客户端结构体
+// TcpClient tcp客户端结构体
 type TcpClient struct {
 	Address   string
 	isClose   bool
@@ -24,7 +24,7 @@ type TcpClient struct {
 	sendOut   chan []byte
 }
 
-// 推送消息结构体
+// PushMessage 推送消息结构体
 type PushMessage struct {
 	MessageId string `json:"message_id"`
 	Source    string `json:"source"`
@@ -33,7 +33,7 @@ type PushMessage struct {
 	Type      string `json:"type"`
 }
 
-// 发送的消息结构体
+// SendMessage 发送的消息结构体
 // 发送不用限制用户消息内容的格式
 type SendMessage struct {
 	Context     *sendLife

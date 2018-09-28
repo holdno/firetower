@@ -16,28 +16,32 @@ import (
 )
 
 var (
-	topicManage     *socket.TcpClient
+	topicManage *socket.TcpClient
+	// TopicManageGrpc 话题管理服务的grpc客户端
 	TopicManageGrpc pb.TopicServiceClient
-
+	// ClusterId 当前实例在集群中的唯一id
 	ClusterId int64 = 1
 
 	// 默认配置文件读取路径
-	DefaultConfigPath                                        = "./fireTower.toml"
-	TowerLogger       func(t *FireTower, types, info string) // 接管系统log t log类型 info log信息
-	FireLogger        func(f *FireInfo, types, info string)  // 接管系统log t log类型 info log信息
+	DefaultConfigPath = "./fireTower.toml"
+	// TowerLogger 接管系统log t log类型 info log信息
+	TowerLogger func(t *FireTower, types, info string)
+	// FireLogger 接管链接log t log类型 info log信息
+	FireLogger func(f *FireInfo, types, info string)
 
 	firePool sync.Pool
-
+	// IdWorker 全局唯一id生成器实例
 	IdWorker *snowFlakeByGo.Worker
 )
 
-// 接收的消息结构体
+// FireInfo 接收的消息结构体
 type FireInfo struct {
 	Context     *FireLife
 	MessageType int
 	Message     *TopicMessage
 }
 
+// TopicMessage 话题信息结构体
 type TopicMessage struct {
 	Topic string          `json:"topic"`
 	Data  json.RawMessage `json:"data"` // 可能是个json
@@ -56,23 +60,28 @@ func NewFireInfo(t *FireTower, context *FireLife) *FireInfo {
 	return fireInfo
 }
 
+// FireInfo 变量回收
 func (f *FireInfo) Recycling() {
 	firePool.Put(f)
 }
 
+// fireInfo 消息的panic日志 并回收变量
 func (f *FireInfo) Panic(info string) {
 	FireLogger(f, "Panic", info)
 	f.Recycling()
 }
 
+// 记录一个INFO级别的日志
 func (f *FireInfo) Info(info string) {
 	FireLogger(f, "INFO", info)
 }
 
+// 记录一个ERROR级别的日志
 func (f *FireInfo) Error(info string) {
 	FireLogger(f, "ERROR", info)
 }
 
+// FireLife 客户端推送消息的结构体
 type FireLife struct {
 	id        string
 	startTime time.Time
@@ -88,6 +97,8 @@ func (f *FireLife) reset(t *FireTower) {
 	f.userId = t.UserId
 }
 
+// FireTower 客户端连接结构体
+// 包含了客户端一个连接的所有信息
 type FireTower struct {
 	connId    uint64 // 连接id 每台服务器上该id从1开始自增
 	ClientId  string // 客户端id 用来做业务逻辑
@@ -110,10 +121,8 @@ type FireTower struct {
 	beforeSubscribeHandler func(context *FireLife, topic []string) bool
 }
 
-type Context struct {
-	startTime time.Time
-}
-
+// 初始化firetower
+// 在调用firetower前请一定要先调用Init方法
 func Init() {
 	firePool.New = func() interface{} {
 		return &FireInfo{

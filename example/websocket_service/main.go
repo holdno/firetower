@@ -24,6 +24,8 @@ type messageInfo struct {
 	Type string `json:"type"`
 }
 
+// GlobalIdWorker
+// 全局唯一id生成器
 var GlobalIdWorker *snowFlakeByGo.Worker
 
 func main() {
@@ -38,6 +40,7 @@ func main() {
 	http.ListenAndServe("0.0.0.0:9999", nil)
 }
 
+// Websocket
 // http转websocket连接 并实例化firetower
 func Websocket(w http.ResponseWriter, r *http.Request) {
 	// 做用户身份验证

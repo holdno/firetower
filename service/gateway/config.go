@@ -6,7 +6,7 @@ import (
 	"github.com/pelletier/go-toml"
 )
 
-// 每个连接的配置信息
+// FireTowerConfig 每个连接的配置信息
 type FireTowerConfig struct {
 	chanLens         int
 	heartbeat        int
@@ -15,7 +15,7 @@ type FireTowerConfig struct {
 }
 
 var (
-	// 保存配置
+	// ConfigTree 保存配置
 	ConfigTree *toml.Tree
 )
 

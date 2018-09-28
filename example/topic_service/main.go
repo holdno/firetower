@@ -7,7 +7,7 @@ import (
 	"github.com/pelletier/go-toml"
 )
 
-// 配置信息
+// ConfigTree 配置信息
 var ConfigTree *toml.Tree
 
 func init() {

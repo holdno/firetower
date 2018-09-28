@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	// TowerManager是一个实例的管理中心
+	// TM 是一个实例的管理中心
 	TM *TowerManager
 )
 
@@ -19,7 +19,7 @@ type TowerManager struct {
 	centralChan chan *socket.SendMessage // 中心处理队列
 }
 
-// bucket的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
+// Bucket的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
 type Bucket struct {
 	mu             sync.RWMutex // 读写锁，可并发读不可并发读写
 	id             int64
@@ -100,6 +100,7 @@ func (b *Bucket) consumer() {
 	}
 }
 
+// AddSubscribe
 // 添加当前实例中的topic->conn的订阅关系
 func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
 	b.mu.Lock()
@@ -112,6 +113,7 @@ func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
 	b.mu.Unlock()
 }
 
+// DelSubscribe
 // 删除当前实例中的topic->conn的订阅关系
 func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 	b.mu.Lock()
@@ -124,7 +126,7 @@ func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 	b.mu.Unlock()
 }
 
-// 桶内进行遍历push
+// Push 桶内进行遍历push
 // 每个bucket有一个Push方法
 // 在推送时每个bucket同时调用Push方法 来达到并发推送
 // 该方法主要通过遍历桶中的topic->conn订阅关系来进行websocket写入
