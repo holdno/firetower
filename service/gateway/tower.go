@@ -403,10 +403,7 @@ func (t *FireTower) Publish(fire *FireInfo) error {
 // 只针对当前客户端进行的推送请调用该方法
 func (t *FireTower) ToSelf(b []byte) error {
 	if t.isClose != true {
-		if err := t.ws.WriteMessage(1, b); err != nil {
-			return err
-		}
-		return nil
+		return t.ws.WriteMessage(1, b)
 	}
 	return ErrorClose
 }
