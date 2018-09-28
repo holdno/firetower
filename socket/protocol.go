@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+
 	"github.com/pkg/errors"
 )
 
@@ -43,7 +44,7 @@ func Enpack(pushType, messageId, source, topic string, content []byte) ([]byte, 
 	return append(append([]byte(ConstHeader), IntToBytes(len(res))...), res...), nil
 }
 
-//解包
+// 解包
 func Depack(buffer []byte, readerChannel chan *SendMessage) ([]byte, error) {
 	length := len(buffer)
 	var (
@@ -105,7 +106,7 @@ Error:
 	return buffer[i:], err
 }
 
-//整形转换成字节
+// 整形转换成字节
 func IntToBytes(n int) []byte {
 	x := int32(n)
 
@@ -114,7 +115,7 @@ func IntToBytes(n int) []byte {
 	return bytesBuffer.Bytes()
 }
 
-//字节转换成整形
+// 字节转换成整形
 func BytesToInt(b []byte) int {
 	bytesBuffer := bytes.NewBuffer(b)
 

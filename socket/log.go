@@ -23,19 +23,23 @@ var (
 	Reset   = string([]byte{27, 91, 48, 109})
 )
 
+// 回收SendMessage对象
 func (s *SendMessage) Recycling() {
 	sendPool.Put(s)
 }
 
+// 记录一个Panic错误日志并回收SendMessage对象
 func (s *SendMessage) Panic(info string) {
 	SendLogger(s, "Panic", info)
 	s.Recycling()
 }
 
+// 记录一个INFO级别的日志
 func (s *SendMessage) Info(info string) {
 	SendLogger(s, "INFO", info)
 }
 
+// 记录一个ERROR级别的日志
 func (s *SendMessage) Error(info string) {
 	SendLogger(s, "ERROR", info)
 }

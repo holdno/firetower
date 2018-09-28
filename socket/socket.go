@@ -2,10 +2,11 @@ package socket
 
 import (
 	"fmt"
-	json "github.com/json-iterator/go"
 	"net"
 	"sync"
 	"time"
+
+	json "github.com/json-iterator/go"
 )
 
 const (
@@ -76,6 +77,7 @@ func init() {
 	SendLogger = sendLog
 }
 
+// 实例化一个tcp客户端
 func NewClient(address string) *TcpClient {
 	return &TcpClient{
 		Address: address,
@@ -85,6 +87,7 @@ func NewClient(address string) *TcpClient {
 	}
 }
 
+// 建立tcp连接
 func (t *TcpClient) Connect() error {
 	lis, err := net.Dial("tcp", t.Address)
 	if err != nil {
@@ -140,6 +143,7 @@ func (t *TcpClient) Connect() error {
 	return nil
 }
 
+// 关闭tcp连接
 func (t *TcpClient) Close() {
 	if !t.isClose {
 		fmt.Println("socket close")
@@ -158,6 +162,7 @@ func (t *TcpClient) Close() {
 	}
 }
 
+// 从tcp通道中读取消息
 func (t *TcpClient) Read() (*SendMessage, error) {
 	if t.isClose {
 		return nil, ErrorClose
@@ -189,34 +194,7 @@ func (t *TcpClient) send(message []byte) error {
 	}
 }
 
-func (t *TcpClient) AddTopic(topic []string) error {
-	message := &TopicEvent{
-		Topic: topic,
-		Type:  SubKey,
-	}
-
-	if data, err := json.Marshal(message); err == nil {
-		t.send(data)
-		return nil
-	} else {
-		return err
-	}
-}
-
-func (t *TcpClient) DelTopic(topic []string) error {
-	message := &TopicEvent{
-		Topic: topic,
-		Type:  UnSubKey,
-	}
-
-	if data, err := json.Marshal(message); err == nil {
-		t.send(data)
-		return nil
-	} else {
-		return err
-	}
-}
-
+// 通过tcp来进行推送的方法
 func (t *TcpClient) Publish(messageId, source, topic string, data json.RawMessage) error {
 	b, err := Enpack(PublishKey, messageId, source, topic, data)
 	if err != nil {
@@ -225,6 +203,7 @@ func (t *TcpClient) Publish(messageId, source, topic string, data json.RawMessag
 	return t.send(b)
 }
 
+// 当有新的推送消息到达tcp客户端时触发
 func (t *TcpClient) OnPush(fn func(message *SendMessage)) {
 	go func() {
 		for {
