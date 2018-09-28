@@ -137,7 +137,6 @@ func (b *Bucket) Push(message *socket.SendMessage) error {
 			v.Send(message)
 		}
 		return nil
-	} else {
-		return ErrorTopicEmpty
 	}
+	return ErrorTopicEmpty
 }

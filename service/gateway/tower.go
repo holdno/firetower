@@ -405,9 +405,8 @@ func (t *FireTower) ToSelf(b []byte) error {
 	if t.isClose != true {
 		if err := t.ws.WriteMessage(1, b); err != nil {
 			return err
-		} else {
-			return nil
 		}
+		return nil
 	}
 	return ErrorClose
 }

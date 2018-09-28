@@ -1,6 +1,3 @@
-//  firetower protocol
-// header+messageLength+[pushType]+ConstSplitSpace+[topic]+ConstNewLine+[content]
-// |      header       |           type           |       params       |  body  |
 package socket
 
 import (
@@ -11,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// 协议中用到的常量
 const (
 	ConstHeader       = "FireHeader"
 	ConstHeaderLength = 10
@@ -18,6 +16,10 @@ const (
 	ConstSplitSpace   = " "
 	ConstNewLine      = '\n'
 )
+
+// firetower protocol
+// header+messageLength+[pushType]+ConstSplitSpace+[topic]+ConstNewLine+[content]
+// |      header       |           type           |       params       |  body  |
 
 // Enpack 封包
 func Enpack(pushType, messageId, source, topic string, content []byte) ([]byte, error) {
