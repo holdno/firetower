@@ -4,15 +4,16 @@ import (
 	"container/list"
 	"context"
 	"fmt"
-	pb "github.com/holdno/firetower/grpc/manager"
-	"github.com/holdno/firetower/socket"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
 	"io"
 	"net"
 	"os"
 	"sync"
 	"time"
+
+	pb "github.com/holdno/firetower/grpc/manager"
+	"github.com/holdno/firetower/socket"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
 type Manager struct {
@@ -40,7 +41,7 @@ type topicGrpcService struct {
 
 // Publish
 func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishRequest) (*pb.PublishResponse, error) {
-	Logger("INFO", fmt.Sprintf("new message:", string(request.Data)))
+	Logger("INFO", fmt.Sprintf("new message: %s", string(request.Data)))
 
 	value, ok := topicRelevance.Load(request.Topic)
 	if !ok {
