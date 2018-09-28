@@ -354,7 +354,6 @@ func (t *FireTower) readDispose() {
 					fire.Error(err.Error())
 				} else if t.subscribeHandler != nil {
 					t.subscribeHandler(fire.Context, addTopic)
-
 				}
 			case "unSubscribe": // 客户端取消订阅topic
 				delTopic := strings.Split(fire.Message.Topic, ",")
