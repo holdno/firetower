@@ -48,7 +48,7 @@ type TopicMessage struct {
 	Type  string          `json:"type"`
 }
 
-// 第二个参数的作用是继承
+// NewFireInfo 第二个参数的作用是继承
 // 继承上一个消息体的上下文，方便日志追踪或逻辑统一
 func NewFireInfo(t *FireTower, context *FireLife) *FireInfo {
 	fireInfo := firePool.Get().(*FireInfo)
@@ -172,7 +172,7 @@ func (t *FireTower) Run() {
 }
 
 // 订阅topic的绑定过程
-func (t *FireTower) bindTopic(topic []string) (error, []string) {
+func (t *FireTower) bindTopic(topic []string) ([]string, error) {
 	var (
 		addTopic []string
 	)
@@ -189,13 +189,13 @@ func (t *FireTower) bindTopic(topic []string) (error, []string) {
 		if err != nil {
 			// 订阅失败影响客户端正常业务逻辑 直接关闭连接
 			t.Close()
-			return err, addTopic
+			return addTopic, err
 		}
 	}
-	return nil, addTopic
+	return addTopic, nil
 }
 
-func (t *FireTower) unbindTopic(topic []string) (error, []string) {
+func (t *FireTower) unbindTopic(topic []string) ([]string, error) {
 	var delTopic []string // 待取消订阅的topic列表
 	bucket := TM.GetBucket(t)
 	for _, v := range topic {
@@ -211,10 +211,10 @@ func (t *FireTower) unbindTopic(topic []string) (error, []string) {
 		if err != nil {
 			// 订阅失败影响客户端正常业务逻辑 直接关闭连接
 			t.Close()
-			return err, delTopic
+			return delTopic, err
 		}
 	}
-	return nil, delTopic
+	return delTopic, nil
 }
 
 func (t *FireTower) read() (*FireInfo, error) {
@@ -248,7 +248,7 @@ func (t *FireTower) Close() {
 			for k := range t.Topic {
 				topicSlice = append(topicSlice, k)
 			}
-			err, delTopic := t.unbindTopic(topicSlice)
+			delTopic, err := t.unbindTopic(topicSlice)
 			fire := NewFireInfo(t, nil)
 			if err != nil {
 				fire.Panic(err.Error())
@@ -349,7 +349,7 @@ func (t *FireTower) readDispose() {
 					}
 				}
 				// 增加messageId 方便追踪
-				err, addTopic = t.bindTopic(addTopic)
+				addTopic, err = t.bindTopic(addTopic)
 				if err != nil {
 					fire.Error(err.Error())
 				} else {
@@ -363,7 +363,7 @@ func (t *FireTower) readDispose() {
 					continue
 				}
 				delTopic := strings.Split(fire.Message.Topic, ",")
-				err, delTopic = t.unbindTopic(delTopic)
+				delTopic, err = t.unbindTopic(delTopic)
 				if err != nil {
 					fire.Error(err.Error())
 				} else {
@@ -408,9 +408,8 @@ func (t *FireTower) ToSelf(b []byte) error {
 		} else {
 			return nil
 		}
-	} else {
-		return ErrorClose
 	}
+	return ErrorClose
 }
 
 // SetReadHandler 客户端推送事件

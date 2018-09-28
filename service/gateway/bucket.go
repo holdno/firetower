@@ -12,14 +12,14 @@ var (
 	TM *TowerManager
 )
 
-// TowerManager包含中心处理队列和多个bucket
+// TowerManager 包含中心处理队列和多个bucket
 // bucket的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
 type TowerManager struct {
 	bucket      []*Bucket
 	centralChan chan *socket.SendMessage // 中心处理队列
 }
 
-// Bucket的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
+// Bucket 的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
 type Bucket struct {
 	mu             sync.RWMutex // 读写锁，可并发读不可并发读写
 	id             int64
@@ -86,6 +86,7 @@ func getConnId() uint64 {
 	return connId
 }
 
+// GetBucket 获取一个可以分配当前连接的bucket
 func (t *TowerManager) GetBucket(bt *FireTower) (bucket *Bucket) {
 	bucket = t.bucket[bt.connId%uint64(len(t.bucket))]
 	return

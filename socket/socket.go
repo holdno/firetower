@@ -73,7 +73,7 @@ func init() {
 	SendLogger = sendLog
 }
 
-// 实例化一个tcp客户端
+// NewClient 实例化一个tcp客户端
 func NewClient(address string) *TcpClient {
 	return &TcpClient{
 		Address: address,
@@ -83,7 +83,7 @@ func NewClient(address string) *TcpClient {
 	}
 }
 
-// 建立tcp连接
+// Connect 建立tcp连接
 func (t *TcpClient) Connect() error {
 	lis, err := net.Dial("tcp", t.Address)
 	if err != nil {
@@ -139,7 +139,7 @@ func (t *TcpClient) Connect() error {
 	return nil
 }
 
-// 关闭tcp连接
+// Close 关闭tcp连接
 func (t *TcpClient) Close() {
 	if !t.isClose {
 		fmt.Println("socket close")

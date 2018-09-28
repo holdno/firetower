@@ -17,6 +17,7 @@ var (
 	// SendLogger 消息相关的日志处理方法
 	SendLogger func(s *SendMessage, types, info string)
 	// 日志颜色
+
 	// Green 绿色
 	Green = string([]byte{27, 91, 57, 55, 59, 52, 50, 109})
 	// White 白色
@@ -35,27 +36,23 @@ var (
 	Reset = string([]byte{27, 91, 48, 109})
 )
 
-// Recycling
-// 回收SendMessage对象
+// Recycling 回收SendMessage对象
 func (s *SendMessage) Recycling() {
 	sendPool.Put(s)
 }
 
-// Panic
-// 记录一个Panic错误日志并回收SendMessage对象
+// Panic 记录一个Panic错误日志并回收SendMessage对象
 func (s *SendMessage) Panic(info string) {
 	SendLogger(s, "Panic", info)
 	s.Recycling()
 }
 
-// Info
-// 记录一个INFO级别的日志
+// Info 记录一个INFO级别的日志
 func (s *SendMessage) Info(info string) {
 	SendLogger(s, "INFO", info)
 }
 
-// Error
-// 记录一个ERROR级别的日志
+// Error 记录一个ERROR级别的日志
 func (s *SendMessage) Error(info string) {
 	SendLogger(s, "ERROR", info)
 }

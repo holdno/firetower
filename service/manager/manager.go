@@ -22,6 +22,7 @@ type Manager struct{}
 
 var (
 	topicRelevance sync.Map
+	// ConnIndexTable 连接关系索引表
 	ConnIndexTable sync.Map
 
 	// Logger 接管系统log t log类型 info log信息
@@ -56,25 +57,24 @@ func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishReque
 	if !ok {
 		// topic 没有存在订阅列表中直接过滤
 		return &pb.PublishResponse{Ok: false}, errors.New("topic not exist")
-	} else {
+	}
 
-		table := value.(*list.List)
-		t.mu.Lock()
-		for e := table.Front(); e != nil; e = e.Next() {
-			c, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
-			if ok {
-				b, err := socket.Enpack(socket.PublishKey, request.MessageId, request.Source, request.Topic, request.Data)
-				if err != nil {
+	table := value.(*list.List)
+	t.mu.Lock()
+	for e := table.Front(); e != nil; e = e.Next() {
+		c, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
+		if ok {
+			b, err := socket.Enpack(socket.PublishKey, request.MessageId, request.Source, request.Topic, request.Data)
+			if err != nil {
 
-				}
-				_, err = c.(*connectBucket).conn.Write(b)
-				if err != nil {
-					c.(*connectBucket).close()
-				}
+			}
+			_, err = c.(*connectBucket).conn.Write(b)
+			if err != nil {
+				c.(*connectBucket).close()
 			}
 		}
-		t.mu.Unlock()
 	}
+	t.mu.Unlock()
 
 	return &pb.PublishResponse{Ok: true}, nil
 }
