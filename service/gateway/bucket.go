@@ -1,26 +1,25 @@
 package gateway
 
 import (
-	"errors"
 	"sync"
 	"sync/atomic"
 
 	"github.com/holdno/firetower/socket"
 )
 
-// TowerManager是一个实例的管理中心
-// 包含中心处理队列和多个bucket
-// bucket的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
 var (
-	TM              *TowerManager
-	ErrorTopicEmpty = errors.New("topic is empty")
+	// TowerManager是一个实例的管理中心
+	TM *TowerManager
 )
 
+// TowerManager包含中心处理队列和多个bucket
+// bucket的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
 type TowerManager struct {
 	bucket      []*Bucket
 	centralChan chan *socket.SendMessage // 中心处理队列
 }
 
+// bucket的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
 type Bucket struct {
 	mu             sync.RWMutex // 读写锁，可并发读不可并发读写
 	id             int64

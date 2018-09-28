@@ -10,11 +10,11 @@ import (
 )
 
 const (
-	SubKey     = "subscribe"
-	UnSubKey   = "unSubscribe"
+	// 与前端(客户端约定的推送关键字)
 	PublishKey = "publish"
 )
 
+// tcp客户端结构体
 type TcpClient struct {
 	Address   string
 	isClose   bool
@@ -24,12 +24,7 @@ type TcpClient struct {
 	sendOut   chan []byte
 }
 
-type TopicEvent struct {
-	Topic []string        `json:"topic"`
-	DATA  json.RawMessage `json:"data"`
-	Type  string          `json:"type"`
-}
-
+// 推送消息结构体
 type PushMessage struct {
 	MessageId string `json:"message_id"`
 	Source    string `json:"source"`

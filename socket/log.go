@@ -8,19 +8,31 @@ import (
 )
 
 var (
-	LogLevel                     = "INFO"
-	DefaultWriter      io.Writer = os.Stdout
+	// 日志打印的级别
+	LogLevel = "INFO"
+	// 正常日志写入的地方
+	DefaultWriter io.Writer = os.Stdout
+	// 错误日志写入的地方
 	DefaultErrorWriter io.Writer = os.Stderr
-	SendLogger         func(s *SendMessage, types, info string)
-	// log color
-	Green   = string([]byte{27, 91, 57, 55, 59, 52, 50, 109})
-	White   = string([]byte{27, 91, 57, 48, 59, 52, 55, 109})
-	Yellow  = string([]byte{27, 91, 57, 55, 59, 52, 51, 109})
-	Red     = string([]byte{27, 91, 57, 55, 59, 52, 49, 109})
-	Blue    = string([]byte{27, 91, 57, 55, 59, 52, 52, 109})
+	// 消息相关的日志处理方法
+	SendLogger func(s *SendMessage, types, info string)
+	// 日志颜色
+	// 绿色
+	Green = string([]byte{27, 91, 57, 55, 59, 52, 50, 109})
+	// 白色
+	White = string([]byte{27, 91, 57, 48, 59, 52, 55, 109})
+	// 黄色
+	Yellow = string([]byte{27, 91, 57, 55, 59, 52, 51, 109})
+	// 红色
+	Red = string([]byte{27, 91, 57, 55, 59, 52, 49, 109})
+	// 蓝色
+	Blue = string([]byte{27, 91, 57, 55, 59, 52, 52, 109})
+	// 品红
 	Magenta = string([]byte{27, 91, 57, 55, 59, 52, 53, 109})
-	Cyan    = string([]byte{27, 91, 57, 55, 59, 52, 54, 109})
-	Reset   = string([]byte{27, 91, 48, 109})
+	// 青色
+	Cyan = string([]byte{27, 91, 57, 55, 59, 52, 54, 109})
+	// 重置日志颜色
+	Reset = string([]byte{27, 91, 48, 109})
 )
 
 // 回收SendMessage对象

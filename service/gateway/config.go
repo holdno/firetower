@@ -15,6 +15,7 @@ type FireTowerConfig struct {
 }
 
 var (
+	// 保存配置
 	ConfigTree *toml.Tree
 )
 

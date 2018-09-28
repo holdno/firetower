@@ -271,7 +271,6 @@ func (t *FireTower) sendLoop() {
 			sendMessage.Data = []byte("heartbeat")
 			if err := t.Send(sendMessage); err != nil {
 				goto collapse
-				return
 			}
 		case <-t.closeChan:
 			heartTicker.Stop()
@@ -321,8 +320,10 @@ func (t *FireTower) readDispose() {
 			fire.Panic(fmt.Sprintf("read message failed:%v", err))
 			t.Close()
 			return
-		}
-		if err == nil {
+		} else {
+			if t.isClose {
+				return
+			}
 			switch fire.Message.Type {
 			case "subscribe": // 客户端订阅topic
 				if fire.Message.Topic == "" {
@@ -361,9 +362,6 @@ func (t *FireTower) readDispose() {
 					}
 				}
 			default:
-				if t.isClose {
-					return
-				}
 				if t.readHandler != nil {
 					ok := t.readHandler(fire)
 					if !ok {
@@ -375,24 +373,9 @@ func (t *FireTower) readDispose() {
 			}
 			fire.Info("Extinguished")
 			fire.Recycling()
-		} else {
-			// TODO 正常情况下不会出现无法json序列化的情况 因为这个参数本身就是string to json来的
 		}
 	}
 }
-
-//func (t *FireTower) Event(event, topic, message string) {
-//	switch event {
-//	case socket.SubKey:
-//		if t.subscribeHandler != nil {
-//			t.subscribeHandler(topic)
-//		}
-//	case socket.UnSubKey:
-//		if t.subscribeHandler != nil {
-//			t.unSubscribeHandler(topic, message)
-//		}
-//	}
-//}
 
 // 推送接口
 // 通过BuildTower生成的实例都可以调用该方法来达到推送的目的
