@@ -2,6 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/holdno/beacontower/archive/master.zip"><img src="https://img.shields.io/badge/download-fast-brightgreen.svg" alt="Downloads"></a>
+  <a href="https://goreportcard.com/report/github.com/holdno/firetower"><img tag="github.com/holdno/firetower" src="https://goreportcard.com/badge/github.com/holdno/firetower"></a>
   <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build Status">
   <img src="https://img.shields.io/badge/package%20utilities-go modules-blue.svg" alt="Package Utilities">
   <img src="https://img.shields.io/badge/golang-1.11.0-%23ff69b4.svg" alt="Version">
