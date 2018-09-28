@@ -16,17 +16,22 @@ import (
 	"google.golang.org/grpc"
 )
 
-type Manager struct {
-}
+// Manager topic管理中心结构体
+// 为了绑定一些专属的操作方法 所以创建了一个空的结构体
+type Manager struct{}
 
 var (
 	topicRelevance sync.Map
 	ConnIndexTable sync.Map
 
-	Logger             func(types, info string) = log // 接管系统log t log类型 info log信息
-	LogLevel                                    = "INFO"
-	DefaultWriter      io.Writer                = os.Stdout
-	DefaultErrorWriter io.Writer                = os.Stderr
+	// Logger 接管系统log t log类型 info log信息
+	Logger func(types, info string) = log
+	// LogLevel 日志打印级别
+	LogLevel = "INFO"
+	// DefaultWriter 正常日志的默认写入方式
+	DefaultWriter io.Writer = os.Stdout
+	// DefaultErrorWriter 错误日志的默认写入方式
+	DefaultErrorWriter io.Writer = os.Stderr
 )
 
 type topicRelevanceItem struct {
@@ -39,7 +44,7 @@ type topicGrpcService struct {
 	mu sync.RWMutex
 }
 
-// 推送的grpc接口
+// Publish 推送的grpc接口
 // request *pb.PublishRequest
 // 接收 Topic 话题
 //     Data  传输内容
@@ -74,7 +79,7 @@ func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishReque
 	return &pb.PublishResponse{Ok: true}, nil
 }
 
-// 获取topic订阅数的grpc接口
+// GetConnectNum 获取topic订阅数的grpc接口
 func (t *topicGrpcService) GetConnectNum(ctx context.Context, request *pb.GetConnectNumRequest) (*pb.GetConnectNumResponse, error) {
 	value, ok := topicRelevance.Load(request.Topic)
 	var num int64
@@ -87,7 +92,7 @@ func (t *topicGrpcService) GetConnectNum(ctx context.Context, request *pb.GetCon
 	return &pb.GetConnectNumResponse{Number: num}, nil
 }
 
-// 订阅topic的grpc接口
+// SubscribeTopic 订阅topic的grpc接口
 func (t *topicGrpcService) SubscribeTopic(ctx context.Context, request *pb.SubscribeTopicRequest) (*pb.SubscribeTopicResponse, error) {
 	for _, topic := range request.Topic {
 		var store *list.List
@@ -113,7 +118,7 @@ func (t *topicGrpcService) SubscribeTopic(ctx context.Context, request *pb.Subsc
 	return &pb.SubscribeTopicResponse{}, nil
 }
 
-// 取消订阅topic的grpc接口
+// UnSubscribeTopic 取消订阅topic的grpc接口
 func (t *topicGrpcService) UnSubscribeTopic(ctx context.Context, request *pb.UnSubscribeTopicRequest) (*pb.UnSubscribeTopicResponse, error) {
 	for _, topic := range request.Topic {
 		value, ok := topicRelevance.Load(topic)
@@ -142,7 +147,7 @@ func (t *topicGrpcService) UnSubscribeTopic(ctx context.Context, request *pb.UnS
 	return &pb.UnSubscribeTopicResponse{}, nil
 }
 
-// 启动grpc服务
+// StartGrpcService 启动grpc服务
 // 包含 话题订阅 与 取消订阅 推送等
 func (m *Manager) StartGrpcService(port string) {
 	lis, err := net.Listen("tcp", port)
@@ -164,7 +169,7 @@ type connectBucket struct {
 	mu         sync.Mutex
 }
 
-// 启动tcp服务
+// StartSocketService 启动tcp服务
 // 主要用来接收gateway的推送消息
 func (m *Manager) StartSocketService(addr string) {
 	lis, err := net.Listen("tcp", addr)

@@ -53,6 +53,7 @@ var (
 	sendPool sync.Pool
 )
 
+// GetSendMessage 创建一条发送记录
 // id 记录消息id
 // source 记录这条信息是用户推送还是平台推送 user | platform
 func GetSendMessage(id, source string) *SendMessage {
@@ -157,7 +158,7 @@ func (t *TcpClient) Close() {
 	}
 }
 
-// 从tcp通道中读取消息
+// Read 从tcp通道中读取消息
 func (t *TcpClient) Read() (*SendMessage, error) {
 	if t.isClose {
 		return nil, ErrorClose
@@ -189,7 +190,7 @@ func (t *TcpClient) send(message []byte) error {
 	}
 }
 
-// 通过tcp来进行推送的方法
+// Publish 通过tcp来进行推送的方法
 func (t *TcpClient) Publish(messageId, source, topic string, data json.RawMessage) error {
 	b, err := Enpack(PublishKey, messageId, source, topic, data)
 	if err != nil {
@@ -198,7 +199,7 @@ func (t *TcpClient) Publish(messageId, source, topic string, data json.RawMessag
 	return t.send(b)
 }
 
-// 当有新的推送消息到达tcp客户端时触发
+// OnPush 当有新的推送消息到达tcp客户端时触发
 func (t *TcpClient) OnPush(fn func(message *SendMessage)) {
 	go func() {
 		for {

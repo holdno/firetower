@@ -2,6 +2,7 @@ package gateway
 
 import "net"
 
+// GetIP 获取当前服务器ip
 func GetIP() (string, error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {

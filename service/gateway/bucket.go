@@ -100,8 +100,7 @@ func (b *Bucket) consumer() {
 	}
 }
 
-// AddSubscribe
-// 添加当前实例中的topic->conn的订阅关系
+// AddSubscribe 添加当前实例中的topic->conn的订阅关系
 func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
 	b.mu.Lock()
 	if m, ok := b.topicRelevance[topic]; ok {
@@ -113,8 +112,7 @@ func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
 	b.mu.Unlock()
 }
 
-// DelSubscribe
-// 删除当前实例中的topic->conn的订阅关系
+// DelSubscribe 删除当前实例中的topic->conn的订阅关系
 func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 	b.mu.Lock()
 	if m, ok := b.topicRelevance[topic]; ok {

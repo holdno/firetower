@@ -233,7 +233,7 @@ func (t *FireTower) Send(message *socket.SendMessage) error {
 	return nil
 }
 
-// 关闭客户端连接并注销
+// Close 关闭客户端连接并注销
 // 调用该方法会完全注销掉由BuildTower生成的一切内容
 func (t *FireTower) Close() {
 	logInfo(t, "websocket connect is closed")
@@ -386,7 +386,7 @@ func (t *FireTower) readDispose() {
 	}
 }
 
-// 推送接口
+// Publish 推送接口
 // 通过BuildTower生成的实例都可以调用该方法来达到推送的目的
 func (t *FireTower) Publish(fire *FireInfo) error {
 	err := topicManage.Publish(fire.Context.id, "user", fire.Message.Topic, fire.Message.Data)
@@ -397,7 +397,7 @@ func (t *FireTower) Publish(fire *FireInfo) error {
 	return nil
 }
 
-// 向自己推送消息
+// ToSelf 向自己推送消息
 // 这里描述一下使用场景
 // 只针对当前客户端进行的推送请调用该方法
 func (t *FireTower) ToSelf(b []byte) error {
@@ -409,37 +409,37 @@ func (t *FireTower) ToSelf(b []byte) error {
 	}
 }
 
-// 客户端推送事件
+// SetReadHandler 客户端推送事件
 // 接收到用户publish的消息时触发
 func (t *FireTower) SetReadHandler(fn func(*FireInfo) bool) {
 	t.readHandler = fn
 }
 
-// 订阅事件
+// SetSubscribeHandler 订阅事件
 // 用户订阅topic后触发
 func (t *FireTower) SetSubscribeHandler(fn func(context *FireLife, topic []string) bool) {
 	t.subscribeHandler = fn
 }
 
-// 取消订阅事件
+// SetUnSubscribeHandler 取消订阅事件
 // 用户取消订阅topic后触发
 func (t *FireTower) SetUnSubscribeHandler(fn func(context *FireLife, topic []string) bool) {
 	t.unSubscribeHandler = fn
 }
 
-// 订阅前回调事件
+// SetBeforeSubscribeHandler 订阅前回调事件
 // 用户订阅topic前触发
 func (t *FireTower) SetBeforeSubscribeHandler(fn func(context *FireLife, topic []string) bool) {
 	t.beforeSubscribeHandler = fn
 }
 
-// 超时回调
+// SetReadTimeoutHandler 超时回调
 // readIn channal写满了  生产 > 消费的情况下触发超时机制
 func (t *FireTower) SetReadTimeoutHandler(fn func(*FireInfo)) {
 	t.readTimeoutHandler = fn
 }
 
-// 获取话题订阅数的grpc方法封装
+// GetConnectNum 获取话题订阅数的grpc方法封装
 func (t *FireTower) GetConnectNum(topic string) int64 {
 	res, err := TopicManageGrpc.GetConnectNum(context.Background(), &pb.GetConnectNumRequest{Topic: topic})
 	if err != nil {
