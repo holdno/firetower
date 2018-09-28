@@ -60,23 +60,23 @@ func NewFireInfo(t *FireTower, context *FireLife) *FireInfo {
 	return fireInfo
 }
 
-// FireInfo 变量回收
+// Recycling 变量回收
 func (f *FireInfo) Recycling() {
 	firePool.Put(f)
 }
 
-// fireInfo 消息的panic日志 并回收变量
+// Panic 消息的panic日志 并回收变量
 func (f *FireInfo) Panic(info string) {
 	FireLogger(f, "Panic", info)
 	f.Recycling()
 }
 
-// 记录一个INFO级别的日志
+// Info 记录一个INFO级别的日志
 func (f *FireInfo) Info(info string) {
 	FireLogger(f, "INFO", info)
 }
 
-// 记录一个ERROR级别的日志
+// Error 记录一个ERROR级别的日志
 func (f *FireInfo) Error(info string) {
 	FireLogger(f, "ERROR", info)
 }
@@ -121,7 +121,7 @@ type FireTower struct {
 	beforeSubscribeHandler func(context *FireLife, topic []string) bool
 }
 
-// 初始化firetower
+// Init 初始化firetower
 // 在调用firetower前请一定要先调用Init方法
 func Init() {
 	firePool.New = func() interface{} {
@@ -141,7 +141,7 @@ func Init() {
 	BuildManagerClient()          // 构建连接manager(topic管理服务)的客户端
 }
 
-// 实例化一个websocket客户端
+// BuildTower 实例化一个websocket客户端
 func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
 	if TopicManageGrpc == nil {
 		panic("please confirm gateway was inited")
@@ -160,7 +160,7 @@ func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
 	return
 }
 
-// 启动websocket客户端
+// Run 启动websocket客户端
 func (t *FireTower) Run() {
 	logInfo(t, "new websocket running")
 	// 读取websocket信息
