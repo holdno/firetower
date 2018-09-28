@@ -8,19 +8,24 @@ import (
 	"github.com/holdno/firetower/socket"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 )
 
 type Manager struct {
-	logger func(t, info string)
 }
 
 var (
 	topicRelevance sync.Map
 	ConnIndexTable sync.Map
-	prefix         = "[firetower manager]"
+
+	Logger             func(types, info string) = log // 接管系统log t log类型 info log信息
+	LogLevel                                    = "INFO"
+	DefaultWriter      io.Writer                = os.Stdout
+	DefaultErrorWriter io.Writer                = os.Stderr
 )
 
 type topicRelevanceItem struct {
@@ -31,14 +36,11 @@ type topicRelevanceItem struct {
 
 type topicGrpcService struct {
 	mu sync.RWMutex
-
-	logInfo  func(info string)
-	logError func(err string)
 }
 
 // Publish
 func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishRequest) (*pb.PublishResponse, error) {
-	t.logInfo(fmt.Sprintf("new message:", string(request.Data)))
+	Logger("INFO", fmt.Sprintf("new message:", string(request.Data)))
 
 	value, ok := topicRelevance.Load(request.Topic)
 	if !ok {
@@ -49,7 +51,6 @@ func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishReque
 		table := value.(*list.List)
 		t.mu.Lock()
 		for e := table.Front(); e != nil; e = e.Next() {
-
 			c, ok := ConnIndexTable.Load(e.Value.(*topicRelevanceItem).ip)
 			if ok {
 				b, err := socket.Enpack(socket.PublishKey, request.MessageId, request.Source, request.Topic, request.Data)
@@ -139,13 +140,11 @@ func (t *topicGrpcService) UnSubscribeTopic(ctx context.Context, request *pb.UnS
 func (m *Manager) StartGrpcService(port string) {
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
-		m.logError(fmt.Sprintf("grpc service listen error: %v", err))
+		Logger("ERROR", fmt.Sprintf("grpc service listen error: %v", err))
+		panic(fmt.Sprintf("grpc service listen error: %v", err))
 	}
 	s := grpc.NewServer()
-	pb.RegisterTopicServiceServer(s, &topicGrpcService{
-		logInfo:  m.logInfo,
-		logError: m.logError,
-	})
+	pb.RegisterTopicServiceServer(s, &topicGrpcService{})
 	s.Serve(lis)
 }
 
@@ -156,21 +155,19 @@ type connectBucket struct {
 	isClose    bool
 	closeChan  chan struct{}
 	mu         sync.Mutex
-
-	logInfo  func(info string)
-	logError func(err string)
 }
 
 func (m *Manager) StartSocketService(addr string) {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		m.logError(fmt.Sprintf("tcp service listen error: %v", err))
+		Logger("ERROR", fmt.Sprintf("tcp service listen error: %v", err))
 		return
 	}
+	Logger("INFO", fmt.Sprintf("tcp service listening: %s", addr))
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
-			m.logError(fmt.Sprintf("tcp service accept error: %v", err))
+			Logger("ERROR", fmt.Sprintf("tcp service accept error: %v", err))
 			continue
 		}
 		bucket := &connectBucket{
@@ -179,9 +176,6 @@ func (m *Manager) StartSocketService(addr string) {
 			conn:       conn,
 			isClose:    false,
 			closeChan:  make(chan struct{}),
-
-			logInfo:  m.logInfo,
-			logError: m.logError,
 		}
 		bucket.relation()     // 建立连接关系
 		go bucket.sendLoop()  // 发包
@@ -190,31 +184,32 @@ func (m *Manager) StartSocketService(addr string) {
 	}
 }
 
-func (m *Manager) logInfo(info string) {
-	if m.logger != nil {
-		m.logger("INFO", info)
+func log(types, info string) {
+	if types == "INFO" {
+		if LogLevel != "INFO" {
+			return
+		}
+		fmt.Fprintf(
+			DefaultWriter,
+			"[Firetower Manager] %s %s %s | LOGTIME %s | LOG %s\n",
+			socket.Green, types, socket.Reset,
+			time.Now().Format("2006-01-02 15:04:05"),
+			info)
 	} else {
-		fmt.Printf("%s %s %s %s\n", prefix, time.Now().Format("2006-01-02 15:04:05"), "INFO", info)
+		fmt.Fprintf(
+			DefaultErrorWriter,
+			"[Firetower Manager] %s %s %s | LOGTIME %s | LOG %s\n",
+			socket.Red, types, socket.Reset,
+			time.Now().Format("2006-01-02 15:04:05"),
+			info)
 	}
-}
-
-func (m *Manager) logError(info string) {
-	if m.logger != nil {
-		m.logger("Error", info)
-	} else {
-		fmt.Printf("%s %s %s %s\n", prefix, time.Now().Format("2006-01-02 15:04:05"), "ERROR", info)
-	}
-}
-
-func (m *Manager) ReplaceLog(fn func(t, info string)) {
-	m.logger = fn
 }
 
 func (c *connectBucket) relation() {
 	// 维护一个IP->连接关系的索引map
 	_, ok := ConnIndexTable.Load(c.conn.RemoteAddr().String())
 	if !ok {
-		c.logInfo(fmt.Sprintf("新连接: %s", c.conn.RemoteAddr().String()))
+		Logger("INFO", fmt.Sprintf("new connection: %s", c.conn.RemoteAddr().String()))
 		ConnIndexTable.Store(c.conn.RemoteAddr().String(), c)
 	}
 }
@@ -255,7 +250,7 @@ func (c *connectBucket) handler() {
 		}
 		c.overflow, err = socket.Depack(append(c.overflow, buffer[:l]...), c.packetChan)
 		if err != nil {
-			c.logError(err.Error())
+			Logger("ERROR", err.Error())
 		}
 	}
 }
@@ -276,7 +271,7 @@ func (c *connectBucket) sendLoop() {
 					if ok {
 						bytes, err := socket.Enpack(message.Type, message.Context.Id, message.Context.Source, message.Topic, message.Data)
 						if err != nil {
-							c.logError(fmt.Sprintf("protocol 封包时错误，%v", err))
+							Logger("ERROR", fmt.Sprintf("protocol 封包时错误，%v", err))
 						}
 						_, err = bucket.(*connectBucket).conn.Write(bytes)
 						if err != nil {

@@ -2,12 +2,12 @@ package gateway
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/gorilla/websocket"
 	pb "github.com/holdno/firetower/grpc/manager"
 	"github.com/holdno/firetower/socket"
 	"github.com/holdno/snowFlakeByGo"
+	json "github.com/json-iterator/go"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,10 +18,10 @@ var (
 	topicManage     *socket.TcpClient
 	TopicManageGrpc pb.TopicServiceClient
 
-	ClusterId = 1
+	ClusterId int64 = 1
 
 	// 默认配置文件读取路径
-	DefaultConfigPath = "./fireTower.toml"
+	DefaultConfigPath                                        = "./fireTower.toml"
 	TowerLogger       func(t *FireTower, types, info string) // 接管系统log t log类型 info log信息
 	FireLogger        func(f *FireInfo, types, info string)  // 接管系统log t log类型 info log信息
 
@@ -113,7 +113,7 @@ type Context struct {
 	startTime time.Time
 }
 
-func init() {
+func Init() {
 	firePool.New = func() interface{} {
 		return &FireInfo{
 			Context: new(FireLife),
@@ -121,7 +121,7 @@ func init() {
 		}
 	}
 
-	IdWorker, _ = snowFlakeByGo.NewWorker(1)
+	IdWorker, _ = snowFlakeByGo.NewWorker(ClusterId)
 
 	TowerLogger = towerLog
 	FireLogger = fireLog
@@ -132,6 +132,9 @@ func init() {
 }
 
 func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
+	if TopicManageGrpc == nil {
+		panic("please confirm gateway was inited")
+	}
 	tower = &FireTower{
 		connId:    getConnId(),
 		ClientId:  clientId,

@@ -24,10 +24,6 @@ func logInfo(t *FireTower, info string) {
 	TowerLogger(t, "INFO", info)
 }
 
-func logError(t *FireTower, err string) {
-	TowerLogger(t, "ERROR", err)
-}
-
 func towerLog(t *FireTower, types, err string) {
 	fmt.Fprintf(
 		DefaultErrorWriter,
