@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build Status">
   <img src="https://img.shields.io/badge/package%20utilities-go modules-blue.svg" alt="Package Utilities">
   <img src="https://img.shields.io/badge/golang-1.11.0-%23ff69b4.svg" alt="Version">
-  <img src="https://img.shields.io/badge/issue-waiting-red.svg" alt="Issue">
+  <img src="https://img.shields.io/badge/license-MIT-brightgreen.svg" alt="license">
 </p>
 <h1 align="center">Firetower</h2>
 firetower是一个可分布式部署的推送服务  
@@ -14,7 +14,7 @@ firetower是一个可分布式部署的推送服务
 自身实现订阅管理服务，无需依赖redis  
 聊天室demo体验地址: http://chat.ojbk.io  
 ### 可用版本
-go get github.com/holdno/firetower@v0.2.0  
+go get github.com/holdno/firetower@v0.3  
 ### 构成
 
 基本服务由两点构成  
@@ -138,4 +138,7 @@ tower.SetUnSubscribeHandler(func(context *gateway.FireLife, topic []string) bool
 
 ## TODO
 - 运行时web看板  
-- 管理后台(人工推送等)     
+- 提供推送相关http及grpc接口
+
+## License  
+[MIT](https://opensource.org/licenses/MIT)
