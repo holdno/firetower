@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/license-MIT-brightgreen.svg" alt="license">
 </p>
 <h1 align="center">Firetower</h2>
-firetower是一个可分布式部署的推送服务  
+firetower是一个用golang开发的分布式推送(IM)服务  
 
 完全基于websocket封装，围绕topic进行sub/pub    
 自身实现订阅管理服务，无需依赖redis  
