@@ -1,4 +1,4 @@
-
+<p align="center"><a href="http://chat.ojbk.io" target="_blank" rel="noopener noreferrer"><img width="150" src="http://img.holdno.com/github/holdno/firetowerlogo.png" alt="firetower logo"></a></p>
 
 <p align="center">
   <a href="https://github.com/holdno/beacontower/archive/master.zip"><img src="https://img.shields.io/badge/download-fast-brightgreen.svg" alt="Downloads"></a>
