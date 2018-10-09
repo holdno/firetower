@@ -1,4 +1,4 @@
-
+<p align="center"><a href="http://chat.ojbk.io" target="_blank" rel="noopener noreferrer"><img width="200" src="http://img.holdno.com/github/holdno/firetowerlogo.png" alt="firetower logo"></a></p>
 
 <p align="center">
   <a href="https://github.com/holdno/beacontower/archive/master.zip"><img src="https://img.shields.io/badge/download-fast-brightgreen.svg" alt="Downloads"></a>
@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/license-MIT-brightgreen.svg" alt="license">
 </p>
 <h1 align="center">Firetower</h2>
-firetower是一个可分布式部署的推送服务  
+firetower是一个用golang开发的分布式推送(IM)服务  
 
 完全基于websocket封装，围绕topic进行sub/pub    
 自身实现订阅管理服务，无需依赖redis  
