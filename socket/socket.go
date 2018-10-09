@@ -163,12 +163,13 @@ func (t *TcpClient) Read() (*SendMessage, error) {
 	if t.isClose {
 		return nil, ErrorClose
 	}
-Retry:
-	message := <-t.readIn
-	if string(message.Type) == "heartbeat" {
-		goto Retry
+	for {
+		message := <-t.readIn
+		if string(message.Type) == "heartbeat" {
+			continue
+		}
+		return message, nil
 	}
-	return message, nil
 }
 
 func (t *TcpClient) send(message []byte) error {

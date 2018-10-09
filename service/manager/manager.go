@@ -10,6 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"net/http"
+
+	"sort"
+
+	"encoding/json"
+
 	pb "github.com/holdno/firetower/grpc/manager"
 	"github.com/holdno/firetower/socket"
 	"github.com/pkg/errors"
@@ -21,6 +27,8 @@ import (
 type Manager struct{}
 
 var (
+	// HttpAddress http服务监听端口配置
+	HttpAddress    = ":8000"
 	topicRelevance sync.Map
 	// ConnIndexTable 连接关系索引表
 	ConnIndexTable sync.Map
@@ -79,17 +87,34 @@ func (t *topicGrpcService) Publish(ctx context.Context, request *pb.PublishReque
 	return &pb.PublishResponse{Ok: true}, nil
 }
 
+// CheckTopicExist 检测topic是否已经存在订阅关系
+func (t *topicGrpcService) CheckTopicExist(ctx context.Context, request *pb.CheckTopicExistRequest) (*pb.CheckTopicExistResponse, error) {
+	_, ok := topicRelevance.Load(request.Topic)
+	if !ok {
+		// topic 没有存在订阅列表中直接过滤
+		return &pb.CheckTopicExistResponse{Ok: false}, nil
+	}
+	return &pb.CheckTopicExistResponse{Ok: true}, nil
+}
+
 // GetConnectNum 获取topic订阅数的grpc接口
 func (t *topicGrpcService) GetConnectNum(ctx context.Context, request *pb.GetConnectNumRequest) (*pb.GetConnectNumResponse, error) {
 	value, ok := topicRelevance.Load(request.Topic)
 	var num int64
 	if ok {
 		l, _ := value.(*list.List)
-		for e := l.Front(); e != nil; e = e.Next() {
-			num += e.Value.(*topicRelevanceItem).num
-		}
+		num = getConnectNum(l)
 	}
+
 	return &pb.GetConnectNumResponse{Number: num}, nil
+}
+
+func getConnectNum(l *list.List) int64 {
+	var num int64
+	for e := l.Front(); e != nil; e = e.Next() {
+		num += e.Value.(*topicRelevanceItem).num
+	}
+	return num
 }
 
 // SubscribeTopic 订阅topic的grpc接口
@@ -305,14 +330,100 @@ func (c *connectBucket) sendLoop() {
 }
 
 func (c *connectBucket) heartbeat() {
-	t := time.NewTicker(1 * time.Minute)
+	t := time.NewTicker(10 * time.Second)
+	// 心跳包内容固定 所以只用封包一次 直接用封好的包发送就可以了
+	// 服务器间心跳时间应该短一些，以便及时获取连接状态
+	b, _ := socket.Enpack("heartbeat", "0", "system", "*", []byte("heartbeat"))
 	for {
 		<-t.C
-		b, _ := socket.Enpack("heartbeat", "0", "system", "*", []byte("heartbeat"))
 		_, err := c.conn.Write(b)
 		if err != nil {
 			c.close()
 			return
 		}
 	}
+}
+
+// web service
+// Response webservice 返回数据结构体
+type Response struct {
+	Meta *Meta  `json:"meta"`
+	Data string `json:"data"`
+}
+
+// Meta http response 状态标识
+type Meta struct {
+	Code  int    `json:"code"`
+	Error string `json:"error"`
+}
+
+// TopicWebRes topic信息面板结构体
+type TopicWebRes struct {
+	Title      string `json:"title"`
+	ConnectNum int64  `json:"connect_num"`
+}
+
+type topics []*TopicWebRes
+
+func (c topics) Len() int {
+	return len(c)
+}
+func (c topics) Swap(i, j int) {
+	c[i], c[j] = c[j], c[i]
+}
+func (c topics) Less(i, j int) bool {
+	return c[i].ConnectNum > c[j].ConnectNum
+}
+
+// HttpDashboard  dashboard http 服务
+func HttpDashboard() {
+	// http.HandleFunc("/", Dashboard)
+	http.HandleFunc("/topic", topicWebHandler)
+	http.ListenAndServe(HttpAddress, nil)
+}
+
+// func Dashboard(w http.ResponseWriter, r *http.Request) {
+//	 w.Header().Set("Content-Type", "text/html; charset=utf-8")
+//	 w.WriteHeader(200)
+//	 template.ParseFiles("")
+// }
+
+// TopicWebHandler 获取topic相关统计信息
+func topicWebHandler(w http.ResponseWriter, r *http.Request) {
+	var topicSlice topics
+	topicRelevance.Range(func(key, value interface{}) bool {
+		var t = new(TopicWebRes)
+		t.Title = key.(string)
+		value, ok := topicRelevance.Load(t.Title)
+		var num int64
+		if ok {
+			l, _ := value.(*list.List)
+			num = getConnectNum(l)
+		}
+		t.ConnectNum = num
+		topicSlice = append(topicSlice, t)
+		return true
+	})
+
+	sort.Sort(topicSlice)
+	res, err := json.Marshal(topicSlice)
+	response := new(Response)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if err != nil {
+		w.WriteHeader(500)
+		meta := &Meta{
+			Code:  5001,
+			Error: err.Error(),
+		}
+		response.Meta = meta
+	} else {
+		meta := &Meta{
+			Code:  0,
+			Error: "",
+		}
+		response.Meta = meta
+		response.Data = string(res)
+	}
+	bytes, _ := json.Marshal(response)
+	w.Write(bytes)
 }

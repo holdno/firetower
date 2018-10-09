@@ -29,7 +29,8 @@ var (
 	// FireLogger 接管链接log t log类型 info log信息
 	FireLogger func(f *FireInfo, types, info string)
 
-	firePool sync.Pool
+	towerPool sync.Pool
+	firePool  sync.Pool
 	// IdWorker 全局唯一id生成器实例
 	IdWorker *snowFlakeByGo.Worker
 )
@@ -109,7 +110,7 @@ type FireTower struct {
 	readIn    chan *FireInfo           // 读取队列
 	sendOut   chan *socket.SendMessage // 发送队列
 	ws        *websocket.Conn          // 保存底层websocket连接
-	Topic     map[string]bool          // 订阅topic列表
+	topic     map[string]bool          // 订阅topic列表
 	isClose   bool                     // 判断当前websocket是否被关闭
 	closeChan chan struct{}            // 用来作为关闭websocket的触发点
 	mutex     sync.Mutex               // 避免并发close chan
@@ -124,6 +125,10 @@ type FireTower struct {
 // Init 初始化firetower
 // 在调用firetower前请一定要先调用Init方法
 func Init() {
+	towerPool.New = func() interface{} {
+		return &FireTower{}
+	}
+
 	firePool.New = func() interface{} {
 		return &FireInfo{
 			Context: new(FireLife),
@@ -138,7 +143,7 @@ func Init() {
 
 	loadConfig(DefaultConfigPath) // 加载配置
 	buildBuckets()                // 构建服务架构
-	BuildManagerClient()          // 构建连接manager(topic管理服务)的客户端
+	buildManagerClient()          // 构建连接manager(topic管理服务)的客户端
 }
 
 // BuildTower 实例化一个websocket客户端
@@ -146,18 +151,28 @@ func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
 	if TopicManageGrpc == nil {
 		panic("please confirm gateway was inited")
 	}
-	tower = &FireTower{
-		connId:    getConnId(),
-		ClientId:  clientId,
-		startTime: time.Now(),
-		readIn:    make(chan *FireInfo, ConfigTree.Get("chanLens").(int64)),
-		sendOut:   make(chan *socket.SendMessage, ConfigTree.Get("chanLens").(int64)),
-		Topic:     make(map[string]bool),
-		ws:        ws,
-		isClose:   false,
-		closeChan: make(chan struct{}),
-	}
+	tower = buildNewTower(ws, clientId)
 	return
+}
+
+func buildNewTower(ws *websocket.Conn, clientId string) *FireTower {
+	t := towerPool.Get().(*FireTower)
+	t.connId = getConnId()
+	t.ClientId = clientId
+	t.startTime = time.Now()
+	t.readIn = make(chan *FireInfo, ConfigTree.Get("chanLens").(int64))
+	t.sendOut = make(chan *socket.SendMessage, ConfigTree.Get("chanLens").(int64))
+	t.topic = make(map[string]bool)
+	t.ws = ws
+	t.isClose = false
+	t.closeChan = make(chan struct{})
+
+	t.readHandler = nil
+	t.readTimeoutHandler = nil
+	t.subscribeHandler = nil
+	t.unSubscribeHandler = nil
+	t.beforeSubscribeHandler = nil
+	return t
 }
 
 // Run 启动websocket客户端
@@ -178,9 +193,9 @@ func (t *FireTower) bindTopic(topic []string) ([]string, error) {
 	)
 	bucket := TM.GetBucket(t)
 	for _, v := range topic {
-		if _, ok := t.Topic[v]; !ok {
+		if _, ok := t.topic[v]; !ok {
 			addTopic = append(addTopic, v) // 待订阅的topic
-			t.Topic[v] = true
+			t.topic[v] = true
 			bucket.AddSubscribe(v, t)
 		}
 	}
@@ -199,10 +214,10 @@ func (t *FireTower) unbindTopic(topic []string) ([]string, error) {
 	var delTopic []string // 待取消订阅的topic列表
 	bucket := TM.GetBucket(t)
 	for _, v := range topic {
-		if _, ok := t.Topic[v]; ok {
+		if _, ok := t.topic[v]; ok {
 			// 如果客户端已经订阅过该topic才执行退订
 			delTopic = append(delTopic, v)
-			delete(t.Topic, v)
+			delete(t.topic, v)
 			bucket.DelSubscribe(v, t)
 		}
 	}
@@ -243,9 +258,9 @@ func (t *FireTower) Close() {
 	defer t.mutex.Unlock()
 	if !t.isClose {
 		t.isClose = true
-		if t.Topic != nil {
+		if t.topic != nil {
 			var topicSlice []string
-			for k := range t.Topic {
+			for k := range t.topic {
 				topicSlice = append(topicSlice, k)
 			}
 			delTopic, err := t.unbindTopic(topicSlice)
@@ -261,6 +276,7 @@ func (t *FireTower) Close() {
 		}
 		t.ws.Close()
 		close(t.closeChan)
+		towerPool.Put(t)
 	}
 }
 
@@ -279,7 +295,7 @@ func (t *FireTower) sendLoop() {
 		case <-heartTicker.C:
 			sendMessage := socket.GetSendMessage("0", "system")
 			sendMessage.MessageType = websocket.TextMessage
-			sendMessage.Data = []byte("heartbeat")
+			sendMessage.Data = []byte{104, 101, 97, 114, 116, 98, 101, 97, 116} // []byte("heartbeat")
 			if err := t.Send(sendMessage); err != nil {
 				goto collapse
 			}
@@ -398,6 +414,15 @@ func (t *FireTower) ToSelf(b []byte) error {
 		return t.ws.WriteMessage(1, b)
 	}
 	return ErrorClose
+}
+
+// CheckTopicExist 检测topic是否已经有人订阅
+func (t *FireTower) CheckTopicExist(topic string) bool {
+	res, err := TopicManageGrpc.CheckTopicExist(context.Background(), &pb.CheckTopicExistRequest{Topic: topic})
+	if err != nil {
+		return false
+	}
+	return res.Ok
 }
 
 // SetReadHandler 客户端推送事件

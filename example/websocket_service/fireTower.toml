@@ -1,7 +1,7 @@
 # 连接配置
 
 chanLens = 1000 # channal 缓冲区大小
-heartbeat = 600 # 心跳间隔 单位秒(s)
+heartbeat = 30 # 心跳间隔 单位秒(s)
 
 topicServiceAddr = "0.0.0.0:6666"
 

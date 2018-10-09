@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc"
 )
 
-// BuildManagerClient 实例化一个与topicManager连接的tcp链接
-func BuildManagerClient() {
+// buildManagerClient 实例化一个与topicManager连接的tcp链接
+func buildManagerClient() {
 	go func() {
 
 	Retry:

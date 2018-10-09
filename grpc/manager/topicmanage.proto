@@ -23,6 +23,7 @@ service TopicService {
     rpc SubscribeTopic(SubscribeTopicRequest) returns (SubscribeTopicResponse){}
     rpc UnSubscribeTopic(UnSubscribeTopicRequest) returns (UnSubscribeTopicResponse){}
     rpc Publish(PublishRequest) returns (PublishResponse){}
+    rpc CheckTopicExist(CheckTopicExistRequest) returns (CheckTopicExistResponse){}
 }
 
 message GetConnectNumRequest {
@@ -59,5 +60,13 @@ message PublishRequest {
 }
 
 message PublishResponse {
+    bool Ok = 1;
+}
+
+message CheckTopicExistRequest {
+    string Topic = 1;
+}
+
+message CheckTopicExistResponse {
     bool Ok = 1;
 }

@@ -23,6 +23,7 @@ type TowerManager struct {
 type Bucket struct {
 	mu             sync.RWMutex // 读写锁，可并发读不可并发读写
 	id             int64
+	len            int64
 	topicRelevance map[string]map[string]*FireTower // topic -> websocket clientid -> websocket conn
 	BuffChan       chan *socket.SendMessage         // bucket的消息处理队列
 }
@@ -56,6 +57,7 @@ func buildBuckets() {
 func newBucket() *Bucket {
 	b := &Bucket{
 		id:             getNewBucketId(),
+		len:            0,
 		topicRelevance: make(map[string]map[string]*FireTower),
 		BuffChan:       make(chan *socket.SendMessage, ConfigTree.Get("bucket.BuffChanCount").(int64)),
 	}
