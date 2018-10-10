@@ -115,6 +115,8 @@ type FireTower struct {
 	closeChan chan struct{}            // 用来作为关闭websocket的触发点
 	mutex     sync.Mutex               // 避免并发close chan
 
+	onConnectHandler       func() bool
+	onOfflineHandler       func()
 	readHandler            func(*FireInfo) bool
 	readTimeoutHandler     func(*FireInfo)
 	subscribeHandler       func(context *FireLife, topic []string) bool
@@ -182,6 +184,13 @@ func (t *FireTower) Run() {
 	go t.readLoop()
 	// 处理读取事件
 	go t.readDispose()
+
+	if t.onConnectHandler != nil {
+		ok := t.onConnectHandler()
+		if !ok {
+			t.Close()
+		}
+	}
 	// 向websocket发送信息
 	t.sendLoop()
 }
@@ -276,6 +285,9 @@ func (t *FireTower) Close() {
 		}
 		t.ws.Close()
 		close(t.closeChan)
+		if t.onOfflineHandler != nil {
+			t.onOfflineHandler()
+		}
 		towerPool.Put(t)
 	}
 }
@@ -423,6 +435,16 @@ func (t *FireTower) CheckTopicExist(topic string) bool {
 		return false
 	}
 	return res.Ok
+}
+
+// SetOnConnectHandler 建立连接事件
+func (t *FireTower) SetOnConnectHandler(fn func() bool) {
+	t.onConnectHandler = fn
+}
+
+// SetOnOfflineHandler 用户连接关闭时触发
+func (t *FireTower) SetOnOfflineHandler(fn func()) {
+	t.onOfflineHandler = fn
 }
 
 // SetReadHandler 客户端推送事件
