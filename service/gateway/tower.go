@@ -17,8 +17,8 @@ import (
 
 var (
 	topicManage *socket.TcpClient
-	// TopicManageGrpc 话题管理服务的grpc客户端
-	TopicManageGrpc pb.TopicServiceClient
+	// topicManageGrpc 话题管理服务的grpc客户端
+	topicManageGrpc pb.TopicServiceClient
 	// ClusterId 当前实例在集群中的唯一id
 	ClusterId int64 = 1
 
@@ -122,6 +122,7 @@ type FireTower struct {
 	subscribeHandler       func(context *FireLife, topic []string) bool
 	unSubscribeHandler     func(context *FireLife, topic []string) bool
 	beforeSubscribeHandler func(context *FireLife, topic []string) bool
+	onSystemRemove         func(topic string)
 }
 
 // Init 初始化firetower
@@ -150,8 +151,13 @@ func Init() {
 
 // BuildTower 实例化一个websocket客户端
 func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
-	if TopicManageGrpc == nil {
+	if topicManageGrpc == nil {
 		panic("please confirm gateway was inited")
+	}
+
+	if ws == nil {
+		towerLog(tower, "ERROR", "websocket.Conn is nil")
+		return
 	}
 	tower = buildNewTower(ws, clientId)
 	return
@@ -209,7 +215,7 @@ func (t *FireTower) bindTopic(topic []string) ([]string, error) {
 		}
 	}
 	if len(addTopic) > 0 {
-		_, err := TopicManageGrpc.SubscribeTopic(context.Background(), &pb.SubscribeTopicRequest{Topic: addTopic, Ip: topicManage.Conn.LocalAddr().String()})
+		_, err := topicManageGrpc.SubscribeTopic(context.Background(), &pb.SubscribeTopicRequest{Topic: addTopic, Ip: topicManage.Conn.LocalAddr().String()})
 		if err != nil {
 			// 订阅失败影响客户端正常业务逻辑 直接关闭连接
 			t.Close()
@@ -231,7 +237,7 @@ func (t *FireTower) unbindTopic(topic []string) ([]string, error) {
 		}
 	}
 	if len(delTopic) > 0 {
-		_, err := TopicManageGrpc.UnSubscribeTopic(context.Background(), &pb.UnSubscribeTopicRequest{Topic: delTopic, Ip: topicManage.Conn.LocalAddr().String()})
+		_, err := topicManageGrpc.UnSubscribeTopic(context.Background(), &pb.UnSubscribeTopicRequest{Topic: delTopic, Ip: topicManage.Conn.LocalAddr().String()})
 		if err != nil {
 			// 订阅失败影响客户端正常业务逻辑 直接关闭连接
 			t.Close()
@@ -321,6 +327,11 @@ collapse:
 }
 
 func (t *FireTower) readLoop() {
+	defer func() {
+		if err := recover(); err != nil {
+			towerLog(t, "PANIC", fmt.Sprintf("%s", err))
+		}
+	}()
 	for {
 		messageType, data, err := t.ws.ReadMessage()
 		if err != nil { // 断开连接
@@ -430,7 +441,7 @@ func (t *FireTower) ToSelf(b []byte) error {
 
 // CheckTopicExist 检测topic是否已经有人订阅
 func (t *FireTower) CheckTopicExist(topic string) bool {
-	res, err := TopicManageGrpc.CheckTopicExist(context.Background(), &pb.CheckTopicExistRequest{Topic: topic})
+	res, err := topicManageGrpc.CheckTopicExist(context.Background(), &pb.CheckTopicExistRequest{Topic: topic})
 	if err != nil {
 		return false
 	}
@@ -477,9 +488,14 @@ func (t *FireTower) SetReadTimeoutHandler(fn func(*FireInfo)) {
 	t.readTimeoutHandler = fn
 }
 
+// SetOnSystemRemove 系统移除某个用户的topic订阅
+func (t *FireTower) SetOnSystemRemove(fn func(topic string)) {
+	t.onSystemRemove = fn
+}
+
 // GetConnectNum 获取话题订阅数的grpc方法封装
 func (t *FireTower) GetConnectNum(topic string) int64 {
-	res, err := TopicManageGrpc.GetConnectNum(context.Background(), &pb.GetConnectNumRequest{Topic: topic})
+	res, err := topicManageGrpc.GetConnectNum(context.Background(), &pb.GetConnectNumRequest{Topic: topic})
 	if err != nil {
 		return 0
 	}

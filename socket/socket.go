@@ -12,6 +12,12 @@ import (
 const (
 	// PublishKey 与前端(客户端约定的推送关键字)
 	PublishKey = "publish"
+	// OfflineTopicByUserIdKey 踢除，将用户某个topic踢下线
+	OfflineTopicByUserIdKey = "offline_topic_by_userid"
+	// OfflineTopicKey 针对某个topic进行踢除
+	OfflineTopicKey = "offline_topic"
+	// OfflineUserKey 将某个用户踢下线
+	OfflineUserKey = "offline_user"
 )
 
 // TcpClient tcp客户端结构体
@@ -37,9 +43,9 @@ type PushMessage struct {
 // 发送不用限制用户消息内容的格式
 type SendMessage struct {
 	Context     *sendLife
-	Type        string
+	Type        string `json:"type"`
 	MessageType int
-	Data        []byte
+	Data        json.RawMessage `json:"data"`
 	Topic       string
 }
 

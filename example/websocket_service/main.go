@@ -88,7 +88,6 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	})
 
 	tower.SetUnSubscribeHandler(func(context *gateway.FireLife, topic []string) bool {
-		fmt.Println("unsub")
 		for _, v := range topic {
 			num := tower.GetConnectNum(v)
 			var pushmsg = gateway.NewFireInfo(tower, context)

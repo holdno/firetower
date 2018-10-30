@@ -98,7 +98,21 @@ func (b *Bucket) consumer() {
 	for {
 		select {
 		case message := <-b.BuffChan:
-			b.Push(message)
+			switch message.Type {
+			case socket.PublishKey:
+				b.push(message)
+			case socket.OfflineTopicByUserIdKey:
+				// 需要退订的topic和user_id
+				b.unSubscribeByUserId(message)
+			case socket.OfflineTopicKey:
+				b.unSubscribeAll(message)
+			case socket.OfflineUserKey:
+				b.offlineUsers(message)
+			}
+			if message.Type == "push" {
+
+			}
+
 		}
 	}
 }
@@ -131,7 +145,7 @@ func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 // 每个bucket有一个Push方法
 // 在推送时每个bucket同时调用Push方法 来达到并发推送
 // 该方法主要通过遍历桶中的topic->conn订阅关系来进行websocket写入
-func (b *Bucket) Push(message *socket.SendMessage) error {
+func (b *Bucket) push(message *socket.SendMessage) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if m, ok := b.topicRelevance[message.Topic]; ok {
@@ -139,6 +153,63 @@ func (b *Bucket) Push(message *socket.SendMessage) error {
 			v.Send(message)
 		}
 		return nil
+	}
+	return ErrorTopicEmpty
+}
+
+// UnSubscribeByUserId 服务端指定某个用户退订某个topic
+func (b *Bucket) unSubscribeByUserId(message *socket.SendMessage) error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if m, ok := b.topicRelevance[message.Topic]; ok {
+		userId := string(message.Data)
+		for _, v := range m {
+			if v.UserId == userId {
+				_, err := v.unbindTopic([]string{message.Topic})
+				v.ToSelf([]byte("{}"))
+				if v.unSubscribeHandler != nil {
+					v.unSubscribeHandler(nil, []string{message.Topic})
+				}
+				if err != nil {
+					return err
+				}
+				return nil
+			}
+		}
+	}
+	return ErrorTopicEmpty
+}
+
+// UnSubscribeAll 移除所有该topic的订阅关系
+func (b *Bucket) unSubscribeAll(message *socket.SendMessage) error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if m, ok := b.topicRelevance[message.Topic]; ok {
+		for _, v := range m {
+			_, err := v.unbindTopic([]string{message.Topic})
+			// 移除所有人的应该不需要执行回调方法
+			if v.onSystemRemove != nil {
+				v.onSystemRemove(message.Topic)
+			}
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return ErrorTopicEmpty
+}
+
+func (b *Bucket) offlineUsers(message *socket.SendMessage) error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if m, ok := b.topicRelevance[message.Topic]; ok {
+		userId := string(message.Data)
+		for _, v := range m {
+			if v.UserId == userId {
+				v.Close()
+				return nil
+			}
+		}
 	}
 	return ErrorTopicEmpty
 }

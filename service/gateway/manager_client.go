@@ -12,21 +12,17 @@ import (
 // buildManagerClient 实例化一个与topicManager连接的tcp链接
 func buildManagerClient() {
 	go func() {
-
 	Retry:
 		var err error
 		conn, err := grpc.Dial(ConfigTree.Get("grpc.address").(string), grpc.WithInsecure())
 		if err != nil {
-			fmt.Println("[manager client] grpc connect error:", ConfigTree.Get("topicServiceAddr").(string), err)
+			fmt.Println("[manager client] grpc connect error:", ConfigTree.Get("grpc.address").(string), err)
 			time.Sleep(time.Duration(1) * time.Second)
 			goto Retry
 		}
-		TopicManageGrpc = pb.NewTopicServiceClient(conn)
+		topicManageGrpc = pb.NewTopicServiceClient(conn)
 		topicManage = socket.NewClient(ConfigTree.Get("topicServiceAddr").(string))
 
-		if err != nil {
-			panic(fmt.Sprintf("[manager client] can not get local IP, error:%v", err))
-		}
 		topicManage.OnPush(func(sendMessage *socket.SendMessage) {
 			TM.centralChan <- sendMessage
 		})
