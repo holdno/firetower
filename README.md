@@ -15,7 +15,7 @@ firetower是一个用golang开发的分布式推送(IM)服务
 自身实现订阅管理服务，无需依赖redis  
 聊天室demo体验地址: http://chat.ojbk.io  
 ### 可用版本
-go get github.com/holdno/firetower@v0.3.3  
+go get github.com/holdno/firetower@v0.4.0  
 ### 构成
 
 基本服务由两点构成  
