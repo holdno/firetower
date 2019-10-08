@@ -54,7 +54,11 @@ type TopicMessage struct {
 func NewFireInfo(t *FireTower, context *FireLife) *FireInfo {
 	fireInfo := firePool.Get().(*FireInfo)
 	if context != nil {
-		fireInfo.Context = context
+	  if(fireInfo!=nil && fireInfo.Context!=nil){
+      fireInfo.Context = context
+   	}else {
+      return fireInfo
+    }
 	} else {
 		fireInfo.Context.reset(t)
 	}
