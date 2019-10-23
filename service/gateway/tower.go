@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	pb "github.com/holdno/firetower/grpc/manager"
-	"github.com/holdno/firetower/socket"
-	"github.com/holdno/snowFlakeByGo"
+	pb "github.com/OSMeteor/firetower/grpc/manager"
+	"github.com/OSMeteor/firetower/socket"
+	"github.com/OSMeteor/snowFlakeByGo"
 	json "github.com/json-iterator/go"
 )
 

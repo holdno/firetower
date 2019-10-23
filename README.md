@@ -1,8 +1,8 @@
 <p align="center"><a href="http://chat.ojbk.io" target="_blank" rel="noopener noreferrer"><img width="200" src="http://img.holdno.com/github/holdno/firetowerlogo.png" alt="firetower logo"></a></p>
 
 <p align="center">
-  <a href="https://github.com/holdno/beacontower/archive/master.zip"><img src="https://img.shields.io/badge/download-fast-brightgreen.svg" alt="Downloads"></a>
-  <a href="https://goreportcard.com/report/github.com/holdno/firetower"><img tag="github.com/holdno/firetower" src="https://goreportcard.com/badge/github.com/holdno/firetower"></a>
+  <a href="https://github.com/OSMeteor/beacontower/archive/master.zip"><img src="https://img.shields.io/badge/download-fast-brightgreen.svg" alt="Downloads"></a>
+  <a href="https://goreportcard.com/report/github.com/OSMeteor/firetower"><img tag="github.com/OSMeteor/firetower" src="https://goreportcard.com/badge/github.com/OSMeteor/firetower"></a>
   <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build Status">
   <img src="https://img.shields.io/badge/package%20utilities-go modules-blue.svg" alt="Package Utilities">
   <img src="https://img.shields.io/badge/golang-1.11.0-%23ff69b4.svg" alt="Version">
@@ -15,7 +15,7 @@ firetower是一个用golang开发的分布式推送(IM)服务
 自身实现订阅管理服务，无需依赖redis  
 聊天室demo体验地址: http://chat.ojbk.io  
 ### 可用版本
-go get github.com/holdno/firetower@v0.4.0  
+go get github.com/OSMeteor/firetower@v0.4.0  
 ### 构成
 
 基本服务由两点构成  
@@ -40,8 +40,8 @@ package main
 import (
     "fmt"
     "github.com/gorilla/websocket"
-    "github.com/holdno/firetower/gateway"
-    "github.com/holdno/snowFlakeByGo" // 这是一个分布式全局唯一id生成器
+    "github.com/OSMeteor/firetower/gateway"
+    "github.com/OSMeteor/snowFlakeByGo" // 这是一个分布式全局唯一id生成器
     "net/http"
     "strconv"
 )
