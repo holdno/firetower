@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	pb "github.com/OSMeteor/firetower/grpc/manager"
-	"github.com/OSMeteor/firetower/socket"
+	pb "firetower/grpc/manager"
+	"firetower/socket"
 	"google.golang.org/grpc"
 )
 
