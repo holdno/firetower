@@ -4,7 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"firetower/socket"
+	"github.com/OSMeteor/firetower/socket"
 )
 
 var (
