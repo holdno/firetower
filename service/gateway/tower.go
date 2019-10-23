@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 	pb "github.com/OSMeteor/firetower/grpc/manager"
 	"github.com/OSMeteor/firetower/socket"
-	"github.com/OSMeteor/snowFlakeByGo"
+	"github.com/holdno/snowFlakeByGo"
 	json "github.com/json-iterator/go"
 )
 

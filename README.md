@@ -41,7 +41,7 @@ import (
     "fmt"
     "github.com/gorilla/websocket"
     "github.com/OSMeteor/firetower/gateway"
-    "github.com/OSMeteor/snowFlakeByGo" // 这是一个分布式全局唯一id生成器
+    "github.com/holdno/snowFlakeByGo" // 这是一个分布式全局唯一id生成器
     "net/http"
     "strconv"
 )

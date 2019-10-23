@@ -8,7 +8,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/OSMeteor/firetower/service/gateway"
-	"github.com/OSMeteor/snowFlakeByGo"
+	"github.com/holdno/snowFlakeByGo"
 	json "github.com/json-iterator/go"
 )
 
