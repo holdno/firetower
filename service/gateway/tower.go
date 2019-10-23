@@ -65,6 +65,7 @@ func NewFireInfo(t *FireTower, context *FireLife) *FireInfo {
 	return fireInfo
 }
 
+
 // Recycling 变量回收
 func (f *FireInfo) Recycling() {
 	firePool.Put(f)
