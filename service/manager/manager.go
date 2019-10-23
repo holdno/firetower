@@ -16,8 +16,8 @@ import (
 
 	"encoding/json"
 
-	pb "github.com/holdno/firetower/grpc/manager"
-	"github.com/holdno/firetower/socket"
+	pb "github.com/OSMeteor/firetower/grpc/manager"
+	"github.com/OSMeteor/firetower/socket"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
