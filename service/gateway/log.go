@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"firetower/socket"
+	"github.com/OSMeteor/firetower/socket"
 )
 
 var (
