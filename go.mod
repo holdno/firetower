@@ -13,7 +13,7 @@ require (
 	golang.org/x/text v0.3.2 // indirect
 	google.golang.org/genproto v0.0.0-20191009194640-548a555dbc03 // indirect
 	google.golang.org/grpc v1.19.0
-	github.com/OSMeteor/firetower v0.4.2
+	github.com/OSMeteor/firetower v0.4.21
 )
 
 go 1.13
