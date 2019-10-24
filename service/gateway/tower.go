@@ -34,7 +34,12 @@ var (
 	// IdWorker 全局唯一id生成器实例
 	IdWorker *snowFlakeByGo.Worker
 )
-
+func GetTopicManage() *socket.TcpClient{ 
+	return topicManage
+}
+func GetTopicManageGrpc() pb.TopicServiceClient{
+	return topicManageGrpc
+}
 // FireInfo 接收的消息结构体
 type FireInfo struct {
 	Context     *FireLife
