@@ -57,17 +57,20 @@ func fireLog(f *FireInfo, types, info string) {
 			string(f.Message.Data),
 			info)
 	} else {
-		fmt.Fprintf(
-			DefaultErrorWriter,
-			"[FireInfo] %s %s %s | LOGTIME %s | RUNTIME %s %v %s | MSGID %s | EVENT %s %s %s | TOPIC %s %s %s | DATA %s | LOG %s\n",
-			socket.Red, types, socket.Reset,
-			time.Now().Format("2006-01-02 15:04:05"),
-			socket.Green, time.Since(f.Context.startTime), socket.Reset,
-			f.Context.id,
-			socket.Yellow, f.Message.Type, socket.Reset,
-			socket.Cyan, f.Message.Topic, socket.Reset,
-			string(f.Message.Data),
-			info)
+		if (f != nil && f.Context!=nil){
+			fmt.Fprintf(
+				DefaultErrorWriter,
+				"[FireInfo] %s %s %s | LOGTIME %s | RUNTIME %s %v %s | MSGID %s | EVENT %s %s %s | TOPIC %s %s %s | DATA %s | LOG %s\n",
+				socket.Red, types, socket.Reset,
+				time.Now().Format("2006-01-02 15:04:05"),
+				socket.Green, time.Since(f.Context.startTime), socket.Reset,
+				f.Context.id,
+				socket.Yellow, f.Message.Type, socket.Reset,
+				socket.Cyan, f.Message.Topic, socket.Reset,
+				string(f.Message.Data),
+				info)
+		}
+		
 	}
 
 }
