@@ -10,9 +10,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-func GetTopicManage() interface {
+type ServicePusher interface {
 	Publish(messageId, source, topic string, data json.RawMessage) error
-} {
+}
+
+func GetTopicManage() ServicePusher {
 	return topicManage
 }
 
