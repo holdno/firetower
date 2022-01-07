@@ -6,8 +6,15 @@ import (
 
 	pb "github.com/holdno/firetower/grpc/manager"
 	"github.com/holdno/firetower/socket"
+	json "github.com/json-iterator/go"
 	"google.golang.org/grpc"
 )
+
+func GetTopicManage() interface {
+	Publish(messageId, source, topic string, data json.RawMessage) error
+} {
+	return topicManage
+}
 
 // buildManagerClient 实例化一个与topicManager连接的tcp链接
 func buildManagerClient() {
