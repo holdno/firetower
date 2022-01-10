@@ -89,6 +89,13 @@ func NewClient(address string) *TcpClient {
 	}
 }
 
+func (t *TcpClient) IsReady() bool {
+	if t == nil || t.isClose {
+		return false
+	}
+	return true
+}
+
 // Connect 建立tcp连接
 func (t *TcpClient) Connect() error {
 	lis, err := net.Dial("tcp", t.Address)

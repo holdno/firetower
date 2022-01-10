@@ -24,7 +24,7 @@ func (o *Options) AddFlags(flagSet *pflag.FlagSet) {
 func main() {
 	var opts Options
 	cmd := &cobra.Command{
-		Use:   "topicmanager",
+		Use:   "topic",
 		Short: "订阅管理服务",
 		RunE: func(c *cobra.Command, args []string) error {
 			var (

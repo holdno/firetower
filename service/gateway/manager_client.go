@@ -12,6 +12,7 @@ import (
 
 type ServicePusher interface {
 	Publish(messageId, source, topic string, data json.RawMessage) error
+	IsReady() bool 
 }
 
 func GetTopicManage() ServicePusher {

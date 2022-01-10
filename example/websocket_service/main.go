@@ -10,6 +10,8 @@ import (
 	"github.com/holdno/firetower/service/gateway"
 	"github.com/holdno/snowFlakeByGo"
 	json "github.com/json-iterator/go"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var upgrader = websocket.Upgrader{
@@ -27,16 +29,37 @@ type messageInfo struct {
 // GlobalIdWorker 全局唯一id生成器
 var GlobalIdWorker *snowFlakeByGo.Worker
 
+type Options struct {
+	ConfigPath string
+}
+
+func (o *Options) AddFlags(flagSet *pflag.FlagSet) {
+	flagSet.StringVarP(&o.ConfigPath, "config", "c", "./topicmanage.toml", "config path")
+}
+
 func main() {
-	// 全局唯一id生成器
-	GlobalIdWorker, _ = snowFlakeByGo.NewWorker(1)
-	// 如果是集群环境  一定一定要给每个服务设置唯一的id
-	// 取值范围 1-1024
-	gateway.ClusterId = 1
-	gateway.Init()
-	http.HandleFunc("/ws", Websocket)
-	fmt.Println("websocket service start: 0.0.0.0:9999")
-	http.ListenAndServe("0.0.0.0:9999", nil)
+	var opts Options
+	cmd := &cobra.Command{
+		Use:   "service",
+		Short: "订阅管理服务",
+		RunE: func(c *cobra.Command, args []string) error {
+			// 全局唯一id生成器
+			GlobalIdWorker, _ = snowFlakeByGo.NewWorker(1)
+			// 如果是集群环境  一定一定要给每个服务设置唯一的id
+			// 取值范围 1-1024
+			gateway.ClusterId = 1
+			gateway.DefaultConfigPath = opts.ConfigPath
+			gateway.Init()
+			http.HandleFunc("/ws", Websocket)
+			fmt.Println("websocket service start: 0.0.0.0:9999")
+			http.ListenAndServe("0.0.0.0:9999", nil)
+			return nil
+		},
+	}
+	opts.AddFlags(cmd.Flags())
+	if err := cmd.Execute(); err != nil {
+		fmt.Printf("failed to run command, %s\n", err.Error())
+	}
 }
 
 // Websocket http转websocket连接 并实例化firetower
