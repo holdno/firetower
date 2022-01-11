@@ -43,10 +43,10 @@ type PushMessage struct {
 // 发送不用限制用户消息内容的格式
 type SendMessage struct {
 	Context     *sendLife       `json:"-"`
-	Type        string          `json:"type"`
+	Type        string          `json:"type,omitempty"`
 	MessageType int             `json:"-"`
 	Data        json.RawMessage `json:"data"`
-	Topic       string          `json:"topic"`
+	Topic       string          `json:"topic,omitempty"`
 }
 
 type sendLife struct {

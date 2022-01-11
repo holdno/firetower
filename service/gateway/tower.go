@@ -319,7 +319,7 @@ func (t *FireTower) sendLoop() {
 		case <-heartTicker.C:
 			sendMessage := socket.GetSendMessage("0", "system")
 			sendMessage.MessageType = websocket.TextMessage
-			sendMessage.Data = []byte{104, 101, 97, 114, 116, 98, 101, 97, 116} // []byte("heartbeat")
+			sendMessage.Data = []byte(`"heartbeat"`)
 			if err := t.Send(sendMessage); err != nil {
 				goto collapse
 			}
