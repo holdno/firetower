@@ -42,11 +42,11 @@ type PushMessage struct {
 // SendMessage 发送的消息结构体
 // 发送不用限制用户消息内容的格式
 type SendMessage struct {
-	Context     *sendLife
-	Type        string `json:"type"`
-	MessageType int
+	Context     *sendLife       `json:"-"`
+	Type        string          `json:"type"`
+	MessageType int             `json:"-"`
 	Data        json.RawMessage `json:"data"`
-	Topic       string
+	Topic       string          `json:"topic"`
 }
 
 type sendLife struct {

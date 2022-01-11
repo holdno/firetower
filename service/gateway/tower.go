@@ -298,6 +298,10 @@ func (t *FireTower) Close() {
 	}
 }
 
+type RealMessage struct {
+	Topic string
+}
+
 func (t *FireTower) sendLoop() {
 	heartTicker := time.NewTicker(time.Duration(ConfigTree.Get("heartbeat").(int64)) * time.Second)
 	for {
@@ -306,7 +310,9 @@ func (t *FireTower) sendLoop() {
 			if message.MessageType == 0 {
 				message.MessageType = 1 // 文本格式
 			}
-			if err := t.ws.WriteMessage(message.MessageType, []byte(message.Data)); err != nil {
+
+			data, _ := json.Marshal(message)
+			if err := t.ws.WriteMessage(message.MessageType, data); err != nil {
 				message.Panic(err.Error())
 				goto collapse
 			}
