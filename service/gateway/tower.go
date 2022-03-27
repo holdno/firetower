@@ -438,6 +438,12 @@ func (t *FireTower) Publish(fire *FireInfo) error {
 	}
 	return nil
 }
+func (f *FireInfo) GetContextId()string {
+	if(strings.TrimSpace(f.Context.id)==""){
+		f.Context.id=strconv.FormatInt(IdWorker.GetId(), 10)
+	}
+	 return f.Context.id
+}
 
 // ToSelf 向自己推送消息
 // 这里描述一下使用场景
