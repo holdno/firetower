@@ -1,19 +1,24 @@
-module github.com/OSMeteor/firetower
+module firetower
+
+go 1.18
 
 require (
-	github.com/golang/protobuf v1.3.2
-	github.com/gorilla/websocket v1.2.0
+	github.com/OSMeteor/firetower v0.4.25
+	github.com/golang/protobuf v1.5.2
+	github.com/gorilla/websocket v1.5.0
 	github.com/holdno/snowFlakeByGo v0.0.0-20180510033652-d23f8a8cadd7
-	github.com/json-iterator/go v1.1.5
-	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
-	github.com/modern-go/reflect2 v1.0.1 // indirect
-	github.com/pelletier/go-toml v1.2.0
-	github.com/pkg/errors v0.8.0
-	golang.org/x/net v0.0.0-20190213061140-3a22650c66bd
-	golang.org/x/text v0.3.2 // indirect
-	google.golang.org/genproto v0.0.0-20191009194640-548a555dbc03 // indirect
-	google.golang.org/grpc v1.19.0
-	github.com/OSMeteor/firetower v0.4.24
+	github.com/json-iterator/go v1.1.12
+	github.com/pelletier/go-toml v1.9.5
+	github.com/pkg/errors v0.9.1
+	golang.org/x/net v0.0.0-20220607020251-c690dde0001d
+	google.golang.org/grpc v1.47.0
 )
 
-go 1.13
+require (
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
+	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
+	golang.org/x/text v0.3.7 // indirect
+	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
+	google.golang.org/protobuf v1.27.1 // indirect
+)
