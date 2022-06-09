@@ -1,4 +1,3 @@
-```
 package main
 
 import (
@@ -103,4 +102,3 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 
 	tower.Run()
 }
-```

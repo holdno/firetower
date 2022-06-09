@@ -1,5 +1,3 @@
-
-```
 package main
 
 import (
@@ -21,10 +19,8 @@ func init() {
 		fmt.Println("config load failed:", err)
 	}
 }
-
 func main() {
 	m := &manager.Manager{}
 	go m.StartGrpcService(fmt.Sprintf(":%d", ConfigTree.Get("grpc.port").(int64)))
 	m.StartSocketService(fmt.Sprintf("0.0.0.0:%d", ConfigTree.Get("socket.port").(int64)))
 }
-```
