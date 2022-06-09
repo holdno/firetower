@@ -1,3 +1,4 @@
+```
 package main
 
 import (
@@ -6,7 +7,7 @@ import (
 	_ "net/http/pprof"
 	"strconv"
 
-	"firetower/service/gateway"
+	"github.com/OSMeteor/firetower/service/gateway"
 
 	"github.com/gorilla/websocket"
 	"github.com/holdno/snowFlakeByGo"
@@ -102,3 +103,4 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 
 	tower.Run()
 }
+```

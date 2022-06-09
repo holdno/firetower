@@ -1,9 +1,11 @@
+
+```
 package main
 
 import (
 	"fmt"
 
-	"firetower/service/manager"
+	"github.com/OSMeteor/firetower/service/manager"
 
 	"github.com/pelletier/go-toml"
 )
@@ -25,3 +27,4 @@ func main() {
 	go m.StartGrpcService(fmt.Sprintf(":%d", ConfigTree.Get("grpc.port").(int64)))
 	m.StartSocketService(fmt.Sprintf("0.0.0.0:%d", ConfigTree.Get("socket.port").(int64)))
 }
+```
