@@ -8,9 +8,10 @@ import (
 	"sync"
 	"time"
 
+	pb "firetower/grpc/manager"
+	"firetower/socket"
+
 	"github.com/gorilla/websocket"
-	pb "github.com/OSMeteor/firetower/grpc/manager"
-	"github.com/OSMeteor/firetower/socket"
 	"github.com/holdno/snowFlakeByGo"
 	json "github.com/json-iterator/go"
 )
@@ -34,12 +35,14 @@ var (
 	// IdWorker 全局唯一id生成器实例
 	IdWorker *snowFlakeByGo.Worker
 )
-func GetTopicManage() *socket.TcpClient{ 
+
+func GetTopicManage() *socket.TcpClient {
 	return topicManage
 }
-func GetTopicManageGrpc() pb.TopicServiceClient{
+func GetTopicManageGrpc() pb.TopicServiceClient {
 	return topicManageGrpc
 }
+
 // FireInfo 接收的消息结构体
 type FireInfo struct {
 	Context     *FireLife
@@ -59,17 +62,16 @@ type TopicMessage struct {
 func NewFireInfo(t *FireTower, context *FireLife) *FireInfo {
 	fireInfo := firePool.Get().(*FireInfo)
 	if context != nil {
-	  if(fireInfo!=nil && fireInfo.Context!=nil){
-      fireInfo.Context = context
-   	}else {
-      return fireInfo
-    }
+		if fireInfo != nil && fireInfo.Context != nil {
+			fireInfo.Context = context
+		} else {
+			return fireInfo
+		}
 	} else {
 		fireInfo.Context.reset(t)
 	}
 	return fireInfo
 }
-
 
 // Recycling 变量回收
 func (f *FireInfo) Recycling() {
@@ -438,11 +440,11 @@ func (t *FireTower) Publish(fire *FireInfo) error {
 	}
 	return nil
 }
-func (f *FireInfo) GetContextId()string {
-	if(strings.TrimSpace(f.Context.id)==""){
-		f.Context.id=strconv.FormatInt(IdWorker.GetId(), 10)
+func (f *FireInfo) GetContextId() string {
+	if strings.TrimSpace(f.Context.id) == "" {
+		f.Context.id = strconv.FormatInt(IdWorker.GetId(), 10)
 	}
-	 return f.Context.id
+	return f.Context.id
 }
 
 // ToSelf 向自己推送消息

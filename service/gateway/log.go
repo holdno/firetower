@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/OSMeteor/firetower/socket"
+	"firetower/socket"
 )
 
 var (
@@ -57,7 +57,7 @@ func fireLog(f *FireInfo, types, info string) {
 			string(f.Message.Data),
 			info)
 	} else {
-		if (f != nil && f.Context!=nil){
+		if f != nil && f.Context != nil {
 			fmt.Fprintf(
 				DefaultErrorWriter,
 				"[FireInfo] %s %s %s | LOGTIME %s | RUNTIME %s %v %s | MSGID %s | EVENT %s %s %s | TOPIC %s %s %s | DATA %s | LOG %s\n",
@@ -70,7 +70,7 @@ func fireLog(f *FireInfo, types, info string) {
 				string(f.Message.Data),
 				info)
 		}
-		
+
 	}
 
 }

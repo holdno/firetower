@@ -6,8 +6,9 @@ import (
 	_ "net/http/pprof"
 	"strconv"
 
+	"firetower/service/gateway"
+
 	"github.com/gorilla/websocket"
-	"github.com/OSMeteor/firetower/service/gateway"
 	"github.com/holdno/snowFlakeByGo"
 	json "github.com/json-iterator/go"
 )

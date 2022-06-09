@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/OSMeteor/firetower/service/manager"
+	"firetower/service/manager"
+
 	"github.com/pelletier/go-toml"
 )
 
