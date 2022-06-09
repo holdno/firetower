@@ -3,7 +3,6 @@ module firetower
 go 1.18
 
 require (
-    github.com/OSMeteor/firetower v0.4.25 
 	github.com/golang/protobuf v1.5.2
 	github.com/gorilla/websocket v1.5.0
 	github.com/holdno/snowFlakeByGo v0.0.0-20180510033652-d23f8a8cadd7
