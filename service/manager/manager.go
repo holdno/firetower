@@ -4,13 +4,15 @@ import (
 	"container/list"
 	"context"
 	"fmt"
-	pb "github.com/holdno/firetower/grpc/manager"
-	"github.com/holdno/firetower/socket"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
 	"net"
 	"sync"
 	"time"
+
+	pb "github.com/holdno/firetower/grpc/manager"
+	"github.com/holdno/firetower/socket"
+
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
 var (

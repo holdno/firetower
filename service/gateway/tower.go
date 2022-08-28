@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/websocket"
-	pb "github.com/holdno/firetower/grpc/manager"
-	"github.com/holdno/firetower/socket"
-	"google.golang.org/grpc"
 	"strings"
 	"sync"
 	"time"
+
+	pb "github.com/holdno/firetower/grpc/manager"
+	"github.com/holdno/firetower/socket"
+
+	"github.com/gorilla/websocket"
+	"google.golang.org/grpc"
 )
 
 var (
