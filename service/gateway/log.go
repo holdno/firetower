@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/holdno/firetower/socket"
+	"github.com/holdno/firetower/protocol"
 )
 
 var (
@@ -31,43 +31,11 @@ func towerLog(t *FireTower, types, err string) {
 	fmt.Fprintf(
 		DefaultErrorWriter,
 		"[FireTower] %s %s %s | LOGTIME %s | RUNTIME %s %v %s | CONNID %d | CLIENTID %s | USERID %s | LOG %s\n",
-		socket.Green, types, socket.Reset,
+		protocol.Green, types, protocol.Reset,
 		time.Now().Format("2006-01-02 15:04:05"),
-		socket.Green, t.startTime.Format("2006-01-02 15:04:05"), socket.Reset,
-		t.connId,
-		t.ClientId,
-		t.UserId,
+		protocol.Green, t.startTime.Format("2006-01-02 15:04:05"), protocol.Reset,
+		t.connID,
+		t.ClientID(),
+		t.UserID(),
 		err)
-}
-
-func fireLog(f *FireInfo, types, info string) {
-	if types == "INFO" {
-		if LogLevel != "INFO" {
-			return
-		}
-		fmt.Fprintf(
-			DefaultWriter,
-			"[FireInfo] %s %s %s | LOGTIME %s | RUNTIME %s %v %s | MSGID %s | EVENT %s %s %s | TOPIC %s %s %s | DATA %s | LOG %s\n",
-			socket.Green, types, socket.Reset,
-			time.Now().Format("2006-01-02 15:04:05"),
-			socket.Green, time.Since(f.Context.startTime), socket.Reset,
-			f.Context.id,
-			socket.Yellow, f.Message.Type, socket.Reset,
-			socket.Cyan, f.Message.Topic, socket.Reset,
-			string(f.Message.Data),
-			info)
-	} else {
-		fmt.Fprintf(
-			DefaultErrorWriter,
-			"[FireInfo] %s %s %s | LOGTIME %s | RUNTIME %s %v %s | MSGID %s | EVENT %s %s %s | TOPIC %s %s %s | DATA %s | LOG %s\n",
-			socket.Red, types, socket.Reset,
-			time.Now().Format("2006-01-02 15:04:05"),
-			socket.Green, time.Since(f.Context.startTime), socket.Reset,
-			f.Context.id,
-			socket.Yellow, f.Message.Type, socket.Reset,
-			socket.Cyan, f.Message.Topic, socket.Reset,
-			string(f.Message.Data),
-			info)
-	}
-
 }

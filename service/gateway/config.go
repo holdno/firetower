@@ -8,11 +8,25 @@ import (
 
 // FireTowerConfig 每个连接的配置信息
 type FireTowerConfig struct {
-	chanLens         int
-	heartbeat        int
-	heartbeatContent string
-	topicServiceAddr string
+	ChanLens         int
+	Heartbeat        int
+	TopicServiceAddr string
+	ServiceMode      string
+	Bucket           BucketConfig
 }
+
+type BucketConfig struct {
+	Num              int
+	CentralChanCount int64
+	BuffChanCount    int64
+	ConsumerNum      int
+}
+
+const (
+	SingleMode         = "single"
+	ClusterMode        = "cluster"
+	DefaultServiceMode = SingleMode
+)
 
 var (
 	// ConfigTree 保存配置

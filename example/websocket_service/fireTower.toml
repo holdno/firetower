@@ -3,8 +3,6 @@
 chanLens = 1000 # channal 缓冲区大小
 heartbeat = 30 # 心跳间隔 单位秒(s)
 
-topicServiceAddr = "0.0.0.0:6666"
-
 [grpc]
 address = "localhost:6667"
 
