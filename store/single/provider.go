@@ -7,6 +7,7 @@ var provider *SingleProvider
 type SingleProvider struct {
 	clusterConnStore  store.ClusterConnStore
 	clusterTopicStore store.ClusterTopicStore
+	clusterStore      store.ClusterStore
 }
 
 func Setup() (*SingleProvider, error) {
@@ -17,6 +18,7 @@ func Setup() (*SingleProvider, error) {
 		clusterTopicStore: &ClusterTopicStore{
 			storage: make(map[string]int64),
 		},
+		clusterStore: &ClusterStore{},
 	}
 	return provider, nil
 }
@@ -31,4 +33,8 @@ func (s *SingleProvider) ClusterConnStore() store.ClusterConnStore {
 
 func (s *SingleProvider) ClusterTopicStore() store.ClusterTopicStore {
 	return s.clusterTopicStore
+}
+
+func (s *SingleProvider) ClusterStore() store.ClusterStore {
+	return s.clusterStore
 }

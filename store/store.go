@@ -12,3 +12,7 @@ type ClusterTopicStore interface {
 	RemoveTopic(topic string) error
 	Topics() ([]string, error)
 }
+
+type ClusterStore interface {
+	ClusterNumber() (int64, error)
+}

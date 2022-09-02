@@ -1,5 +1,7 @@
 package protocol
 
+type FireSource string
+
 const (
 	// PublishKey 与前端(客户端约定的推送关键字)
 	PublishKey = "publish"
@@ -8,5 +10,8 @@ const (
 	// OfflineTopicKey 针对某个topic进行踢除
 	OfflineTopicKey = "offline_topic"
 	// OfflineUserKey 将某个用户踢下线
-	OfflineUserKey = "offline_user"
+	OfflineUserKey            = "offline_user"
+	SourceClient   FireSource = "client"
+	SourceLogic    FireSource = "logic"
+	SourceSystem   FireSource = "system"
 )

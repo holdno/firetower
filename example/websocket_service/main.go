@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/holdno/firetower/config"
 	"github.com/holdno/firetower/protocol"
-	"github.com/holdno/firetower/service/gateway"
+	towersvc "github.com/holdno/firetower/service/tower"
+	"github.com/holdno/firetower/utils"
 	"github.com/holdno/snowFlakeByGo"
 	json "github.com/json-iterator/go"
 )
@@ -32,20 +34,27 @@ var GlobalIdWorker *snowFlakeByGo.Worker
 
 func main() {
 	// 全局唯一id生成器
-	GlobalIdWorker, _ = snowFlakeByGo.NewWorker(1)
-	// 如果是集群环境  一定一定要给每个服务设置唯一的id
-	// 取值范围 1-1024
-	gateway.ClusterId = 1
-	gateway.Setup(gateway.FireTowerConfig{
+	towersvc.Setup(config.FireTowerConfig{
 		ChanLens:    1000,
 		Heartbeat:   30,
-		ServiceMode: gateway.SingleMode,
-		Bucket: gateway.BucketConfig{
+		ServiceMode: config.SingleMode,
+		Bucket: config.BucketConfig{
 			Num:              4,
 			CentralChanCount: 100000,
 			BuffChanCount:    1000,
 			ConsumerNum:      1,
 		},
+		// Cluster: config.Cluster{
+		// 	RedisOption: config.Redis{
+		// 		Addr: "localhost:6379",
+		// 	},
+		// 	NatsOption: config.Nats{
+		// 		Addr:       "nats://localhost:4222",
+		// 		UserName:   "firetower",
+		// 		Password:   "firetower",
+		// 		ServerName: "firetower",
+		// 	},
+		// },
 	})
 	http.HandleFunc("/ws", Websocket)
 	fmt.Println("websocket service start: 0.0.0.0:9999")
@@ -59,10 +68,11 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	// 验证成功才升级连接
 	ws, _ := upgrader.Upgrade(w, r, nil)
 
-	id := GlobalIdWorker.GetId()
-	tower := gateway.BuildTower(ws, strconv.FormatInt(id, 10))
+	id := utils.IDWorker().GetId()
+	tower := towersvc.BuildTower(ws, strconv.FormatInt(id, 10))
 
 	tower.SetReadHandler(func(fire *protocol.FireInfo) bool {
+		// fire将会在handler执行结束后被回收
 		messageInfo := new(messageInfo)
 		err := json.Unmarshal(fire.Message.Data, messageInfo)
 		if err != nil {
@@ -88,7 +98,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 				return true
 			}
 			roomCode := strings.TrimLeft(msg, "/room ")
-			if err = tower.Subscribe(fire.Context, []string{"/room/" + roomCode}); err != nil {
+			if err = tower.Subscribe(fire.Context, []string{"/chat/" + roomCode}); err != nil {
 				messageInfo.From = "system"
 				messageInfo.Type = "event"
 				messageInfo.Data = []byte(fmt.Sprintf(`{"type": "error", "msg": "切换房间失败, %s, 请重新尝试"}`, err.Error()))
@@ -97,11 +107,6 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 				return true
 			}
 
-			messageInfo.From = "system"
-			messageInfo.Type = "event"
-			messageInfo.Data = []byte(fmt.Sprintf(`{"type": "change_room", "room": "%s"}`, roomCode))
-			fire.Message.Data, _ = json.Marshal(messageInfo)
-			tower.ToSelf(fire.Message.Data)
 			return true
 		}
 
@@ -129,34 +134,33 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		messageInfo.Type = "timeout"
 		b, _ := json.Marshal(messageInfo)
 		err = tower.ToSelf(b)
-		if err != gateway.ErrorClose {
+		if err != towersvc.ErrorClose {
 			fmt.Println("err:", err)
 		}
 	})
 
-	tower.SetBeforeSubscribeHandler(func(context *protocol.FireLife, topic []string) bool {
+	tower.SetBeforeSubscribeHandler(func(context protocol.FireLife, topic []string) bool {
 		// 这里用来判断当前用户是否允许订阅该topic
 		return true
 	})
 
-	tower.SetSubscribeHandler(func(context *protocol.FireLife, topic []string) bool {
+	tower.SetSubscribeHandler(func(context protocol.FireLife, topic []string) bool {
 		for _, v := range topic {
 			if strings.HasPrefix(v, "/chat/") {
 				roomCode := strings.TrimPrefix(v, "/chat/")
 				messageInfo := new(messageInfo)
-				fire := protocol.NewFireInfo(tower)
 				messageInfo.From = "system"
 				messageInfo.Type = "event"
 				messageInfo.Data = []byte(fmt.Sprintf(`{"type": "change_room", "room": "%s"}`, roomCode))
-				fire.Message.Data, _ = json.Marshal(messageInfo)
-				tower.ToSelf(fire.Message.Data)
+				msg, _ := json.Marshal(messageInfo)
+				tower.ToSelf(msg)
 				return true
 			}
 		}
 		return true
 	})
 
-	tower.SetUnSubscribeHandler(func(context *protocol.FireLife, topic []string) bool {
+	tower.SetUnSubscribeHandler(func(context protocol.FireLife, topic []string) bool {
 		// for _, v := range topic {
 		// 	num := tower.GetConnectNum(v)
 		// 	var pushmsg = protocol.NewFireInfo(tower)
@@ -180,7 +184,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 					if topicConnCache[v] == num {
 						continue
 					}
-					pushmsg := protocol.NewFireInfo(tower)
+					pushmsg := towersvc.NewFire("system", tower)
 					pushmsg.Message.Topic = v
 					pushmsg.Message.Data = []byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num))
 					tower.Publish(pushmsg)
