@@ -187,7 +187,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 					pushmsg := towersvc.NewFire("system", tower)
 					pushmsg.Message.Topic = v
 					pushmsg.Message.Data = []byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num))
-					msg, _ := json.Marshal(pushmsg)
+					msg, _ := json.Marshal(pushmsg.Message)
 					tower.ToSelf(msg)
 					topicConnCache[v] = num
 				}
