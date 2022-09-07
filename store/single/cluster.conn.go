@@ -25,7 +25,7 @@ func (s *ClusterConnStore) OneClientAtomicAddBy(clientIP string, num int64) erro
 	return nil
 }
 
-func (s *ClusterConnStore) GetAllConnNum() (int64, error) {
+func (s *ClusterConnStore) GetAllConnNum() (uint64, error) {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -33,7 +33,7 @@ func (s *ClusterConnStore) GetAllConnNum() (int64, error) {
 	for _, v := range s.storage {
 		result += v
 	}
-	return result, nil
+	return uint64(result), nil
 }
 
 func (s *ClusterConnStore) RemoveClient(clientIP string) error {

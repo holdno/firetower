@@ -33,6 +33,12 @@ func init() {
 	}
 }
 
+type Manager interface {
+	protocol.Pusher
+	GetTopics() (map[string]uint64, error)
+	ClusterID() int64
+}
+
 // TowerManager 包含中心处理队列和多个bucket
 // bucket的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
 type TowerManager struct {
@@ -107,7 +113,13 @@ func BuildWithStore(store stores) TowerOption {
 	}
 }
 
-func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) error {
+func BuildWithClusterID(id int64) TowerOption {
+	return func(t *TowerManager) {
+		t.clusterID = id
+	}
+}
+
+func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, error) {
 	tm = &TowerManager{
 		cfg:          cfg,
 		bucket:       make([]*Bucket, cfg.Bucket.Num),
@@ -135,7 +147,14 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) error {
 		if cfg.ServiceMode == config.SingleMode {
 			tm.Pusher = protocol.DefaultPusher(tm.brazier, tm.coder)
 		} else {
-			tm.Pusher = nats.MustSetupNatsPusher(cfg.Cluster.NatsOption, tm.brazier, tm.coder, tm.GetTopics)
+			tm.Pusher = nats.MustSetupNatsPusher(cfg.Cluster.NatsOption, tm.brazier, tm.coder, func() map[string]uint64 {
+				m, err := tm.stores.ClusterTopicStore().Topics()
+				if err != nil {
+					//todo log
+					return map[string]uint64{}
+				}
+				return m
+			})
 		}
 	}
 
@@ -151,11 +170,13 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) error {
 		}
 	}
 
-	clusterID, err := tm.stores.ClusterStore().ClusterNumber()
-	if err != nil {
-		return err
+	if tm.clusterID == 0 {
+		clusterID, err := tm.stores.ClusterStore().ClusterNumber()
+		if err != nil {
+			return nil, err
+		}
+		tm.clusterID = clusterID
 	}
-	tm.clusterID = clusterID
 	utils.SetupIDWorker(tm.clusterID)
 
 	for i := range tm.bucket {
@@ -240,20 +261,14 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) error {
 		}
 	}()
 
-	return nil
+	return tm, nil
 }
 
-func (t *TowerManager) GetTopics() map[string]struct{} {
-	topics := make(map[string]struct{})
-	for _, v := range t.bucket {
-		for k := range v.topicRelevance {
-			topics[k] = struct{}{}
-		}
-	}
-	return topics
+func (t *TowerManager) GetTopics() (map[string]uint64, error) {
+	return t.stores.ClusterTopicStore().ClusterTopics()
 }
 
-func ClusterID() int64 {
+func (t *TowerManager) ClusterID() int64 {
 	if tm == nil {
 		panic("firetower cluster not setup")
 	}

@@ -11,7 +11,7 @@ import (
 
 var _ protocol.Pusher = (*pusher)(nil)
 
-func MustSetupNatsPusher(cfg config.Nats, b protocol.Brazier, coder protocol.Coder, topicFunc func() map[string]struct{}) protocol.Pusher {
+func MustSetupNatsPusher(cfg config.Nats, b protocol.Brazier, coder protocol.Coder, topicFunc func() map[string]uint64) protocol.Pusher {
 	p := &pusher{
 		b:            b,
 		coder:        coder,
@@ -32,7 +32,7 @@ type pusher struct {
 	once         sync.Once
 	b            protocol.Brazier
 	coder        protocol.Coder
-	currentTopic func() map[string]struct{}
+	currentTopic func() map[string]uint64
 }
 
 func (p *pusher) Publish(fire *protocol.FireInfo) error {

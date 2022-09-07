@@ -2,15 +2,19 @@ package redis
 
 import (
 	"context"
+	"encoding/binary"
+	"fmt"
 	"sync"
 	"time"
-
-	"github.com/vmihailenco/msgpack/v5"
 )
 
 type ClusterConnStore struct {
 	storage  map[string]int64
 	provider *RedisProvider
+	isMaster bool
+
+	keepMasterScriptSHA             string
+	clusterShutdownCheckerScriptSHA string
 
 	sync.RWMutex
 }
@@ -20,10 +24,34 @@ const (
 )
 
 func newClusterConnStore(provider *RedisProvider) *ClusterConnStore {
-	return &ClusterConnStore{
+	s := &ClusterConnStore{
 		storage:  make(map[string]int64),
 		provider: provider,
 	}
+
+	res := s.provider.dbconn.ScriptLoad(context.TODO(), clusterShutdownCheckerScript)
+	if res.Err() != nil {
+		panic(res.Err())
+	}
+	s.clusterShutdownCheckerScriptSHA = res.Val()
+
+	res = s.provider.dbconn.ScriptLoad(context.TODO(), keepMasterScript)
+	if res.Err() != nil {
+		panic(res.Err())
+	}
+	s.keepMasterScriptSHA = res.Val()
+
+	go s.KeepClusterClear()
+
+	if err := s.init(); err != nil {
+		panic(err)
+	}
+	return s
+}
+
+func (s *ClusterConnStore) init() error {
+	res := s.provider.dbconn.HDel(context.TODO(), ClusterConnKey, s.provider.clientIP)
+	return res.Err()
 }
 
 func (s *ClusterConnStore) ClusterMembers() ([]string, error) {
@@ -38,23 +66,26 @@ func (s *ClusterConnStore) ClusterMembers() ([]string, error) {
 	return list, nil
 }
 
-// N: connNum, T: updateTime
-type connNumTmp struct {
-	N int64
-	T int64
+func packClientConnNumberNow(num uint64) string {
+	b := make([]byte, 16)
+	binary.LittleEndian.PutUint64(b, num)
+	binary.LittleEndian.PutUint64(b[8:], uint64(time.Now().Unix()))
+	return string(b)
 }
 
-const connNumJsonTmp = `{"n": %d,"t": %d}`
+func unpackClientConnNumberNow(b string) (uint64, error) {
+	if len([]byte(b)) != 16 {
+		return 0, fmt.Errorf("wrong pack data, got lenght %d, need 16", len([]byte(b)))
+	}
+	return binary.LittleEndian.Uint64([]byte(b)[:8]), nil
+}
 
 func (s *ClusterConnStore) OneClientAtomicAddBy(clientIP string, num int64) error {
 	s.Lock()
 	defer s.Unlock()
 	s.storage[clientIP] += num
-	b, _ := msgpack.Marshal(&connNumTmp{
-		N: s.storage[clientIP],
-		T: time.Now().Unix(),
-	})
-	res := s.provider.dbconn.HSet(context.TODO(), ClusterConnKey, clientIP, string(b))
+
+	res := s.provider.dbconn.HSet(context.TODO(), ClusterConnKey, clientIP, packClientConnNumberNow(uint64(num)))
 	if res.Err() != nil {
 		s.storage[clientIP] -= num
 		return res.Err()
@@ -62,18 +93,18 @@ func (s *ClusterConnStore) OneClientAtomicAddBy(clientIP string, num int64) erro
 	return nil
 }
 
-func (s *ClusterConnStore) GetAllConnNum() (int64, error) {
+func (s *ClusterConnStore) GetAllConnNum() (uint64, error) {
 	res := s.provider.dbconn.HGetAll(context.TODO(), ClusterConnKey)
 	if res.Err() != nil {
 		return 0, res.Err()
 	}
-	var result int64
+	var result uint64
 	for _, v := range res.Val() {
-		var value connNumTmp
-		if err := msgpack.Unmarshal([]byte(v), &value); err != nil {
+		singleNumber, err := unpackClientConnNumberNow(v)
+		if err != nil {
 			return 0, err
 		}
-		result += value.N
+		result += singleNumber
 	}
 	return result, nil
 }
@@ -88,4 +119,75 @@ func (s *ClusterConnStore) RemoveClient(clientIP string) error {
 	delete(s.storage, clientIP)
 
 	return nil
+}
+
+const clusterShutdownCheckerScript = `
+local key = KEYS[1]
+local currentTime = KEYS[2]
+local clientConns = redis.call("hgetall", key)
+local delTable = {}
+
+for i = 1, #clientConns, 2 do
+	local number, timestamp = struct.unpack("<i8<i8",clientConns[i+1])
+	if (currentTime > tostring(timestamp + 3))
+	then 
+		table.insert(delTable, clientConns[i])
+	end
+end
+
+return redis.call("hdel", key, unpack(delTable))
+`
+
+func (s *ClusterConnStore) KeepClusterClear() {
+	go s.SelectMaster()
+	for {
+		if !s.isMaster {
+			time.Sleep(time.Second)
+			continue
+		}
+
+		time.Sleep(time.Second)
+		result := s.provider.dbconn.EvalSha(context.TODO(), s.clusterShutdownCheckerScriptSHA, []string{ClusterConnKey, fmt.Sprintf("%d", time.Now().Unix())}, 2)
+		if result.Err() != nil {
+			// todo log
+			continue
+		}
+	}
+}
+
+const keepMasterScript = `
+local lockKey = KEYS[1]
+local currentID = KEYS[2]
+local currentMaster = redis.call('get', lockKey)
+local success = "fail"
+
+if (currentID == currentMaster) 
+then
+	redis.call('expire', lockKey, 3)
+	success = "success"
+end
+return success
+`
+
+func (s *ClusterConnStore) SelectMaster() {
+	lockKey := "ft_cluster_master"
+	for {
+		res := s.provider.dbconn.SetNX(context.Background(), lockKey, s.provider.clientIP, time.Second*3)
+		if res.Val() {
+			s.isMaster = true
+			ticker := time.NewTicker(time.Second * 1)
+			for {
+				select {
+				case <-ticker.C:
+					res := s.provider.dbconn.EvalSha(context.Background(), s.keepMasterScriptSHA, []string{lockKey, s.provider.clientIP}, 2)
+					if res.Val() != "success" || res.Err() != nil {
+						s.isMaster = false
+						ticker.Stop()
+						break
+					}
+				}
+			}
+		}
+		time.Sleep(time.Second)
+	}
 }

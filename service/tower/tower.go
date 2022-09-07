@@ -67,7 +67,7 @@ func (t *FireTower) Ext() sync.Map {
 
 // Init 初始化firetower
 // 在调用firetower前请一定要先调用Init方法
-func Setup(cfg config.FireTowerConfig) error {
+func Setup(cfg config.FireTowerConfig) (Manager, error) {
 	towerPool.New = func() interface{} {
 		return &FireTower{}
 	}
@@ -75,11 +75,7 @@ func Setup(cfg config.FireTowerConfig) error {
 	TowerLogger = towerLog
 
 	// 构建服务架构
-	if err := BuildFoundation(cfg); err != nil {
-		return err
-	}
-
-	return nil
+	return BuildFoundation(cfg)
 }
 
 // BuildTower 实例化一个websocket客户端
@@ -443,7 +439,7 @@ func (t *FireTower) SetOnSystemRemove(fn func(topic string)) {
 }
 
 // GetConnectNum 获取话题订阅数的grpc方法封装
-func (t *FireTower) GetConnectNum(topic string) int64 {
+func (t *FireTower) GetConnectNum(topic string) uint64 {
 	number, err := tm.stores.ClusterTopicStore().GetTopicConnNum(topic)
 	if err != nil {
 		// todo log & warning

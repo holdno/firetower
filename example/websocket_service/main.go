@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/holdno/firetower/config"
 	"github.com/holdno/firetower/protocol"
+	"github.com/holdno/firetower/service/tower"
 	towersvc "github.com/holdno/firetower/service/tower"
 	"github.com/holdno/firetower/utils"
 	"github.com/holdno/snowFlakeByGo"
@@ -32,30 +33,63 @@ type messageInfo struct {
 // GlobalIdWorker 全局唯一id生成器
 var GlobalIdWorker *snowFlakeByGo.Worker
 
+var _ tower.PusherInfo = (*SystemPusher)(nil)
+
+type SystemPusher struct {
+	clientID string
+}
+
+func (s *SystemPusher) UserID() string {
+	return "system"
+}
+func (s *SystemPusher) ClientID() string {
+	return s.clientID
+}
+
+var systemer *SystemPusher
+
 func main() {
 	// 全局唯一id生成器
-	towersvc.Setup(config.FireTowerConfig{
+	tm, err := towersvc.Setup(config.FireTowerConfig{
 		ChanLens:    1000,
 		Heartbeat:   30,
-		ServiceMode: config.SingleMode,
+		ServiceMode: config.ClusterMode,
 		Bucket: config.BucketConfig{
 			Num:              4,
 			CentralChanCount: 100000,
 			BuffChanCount:    1000,
 			ConsumerNum:      1,
 		},
-		// Cluster: config.Cluster{
-		// 	RedisOption: config.Redis{
-		// 		Addr: "localhost:6379",
-		// 	},
-		// 	NatsOption: config.Nats{
-		// 		Addr:       "nats://localhost:4222",
-		// 		UserName:   "firetower",
-		// 		Password:   "firetower",
-		// 		ServerName: "firetower",
-		// 	},
-		// },
+		Cluster: config.Cluster{
+			RedisOption: config.Redis{
+				Addr: "localhost:6379",
+			},
+			NatsOption: config.Nats{
+				Addr:       "nats://localhost:4222",
+				UserName:   "firetower",
+				Password:   "firetower",
+				ServerName: "firetower",
+			},
+		},
 	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	systemer = &SystemPusher{
+		clientID: "1",
+	}
+
+	go func() {
+		for {
+			time.Sleep(time.Second * 60)
+			f := tower.NewFire(protocol.SourceSystem, systemer)
+			f.Message.Topic = "/chat/world"
+			f.Message.Data = []byte(fmt.Sprintf("{\"type\":\"publish\",\"data\":\"请通过 room 命令切换聊天室\",\"from\":\"system\"}"))
+			tm.Publish(f)
+		}
+	}()
 	http.HandleFunc("/ws", Websocket)
 	fmt.Println("websocket service start: 0.0.0.0:9999")
 	http.ListenAndServe("0.0.0.0:9999", nil)
@@ -173,7 +207,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 
 	ticker := time.NewTicker(time.Millisecond * 500)
 	go func() {
-		topicConnCache := make(map[string]int64)
+		topicConnCache := make(map[string]uint64)
 		for {
 			select {
 			case <-tower.OnClose():
@@ -184,11 +218,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 					if topicConnCache[v] == num {
 						continue
 					}
-					pushmsg := towersvc.NewFire("system", tower)
-					pushmsg.Message.Topic = v
-					pushmsg.Message.Data = []byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num))
-					msg, _ := json.Marshal(pushmsg.Message)
-					tower.ToSelf(msg)
+					tower.ToSelf([]byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num)))
 					topicConnCache[v] = num
 				}
 			}

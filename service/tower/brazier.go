@@ -20,7 +20,12 @@ func (b *brazier) LightAFire() *protocol.FireInfo {
 	return firePool.Get().(*protocol.FireInfo)
 }
 
-func NewFire(source protocol.FireSource, tower *FireTower) *protocol.FireInfo {
+type PusherInfo interface {
+	ClientID() string
+	UserID() string
+}
+
+func NewFire(source protocol.FireSource, tower PusherInfo) *protocol.FireInfo {
 	f := tm.brazier.LightAFire()
 	f.Message.Type = protocol.PublishKey
 	f.Context.Reset(source, tower.ClientID(), tower.UserID())

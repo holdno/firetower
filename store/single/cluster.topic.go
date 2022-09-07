@@ -25,18 +25,20 @@ func (s *ClusterTopicStore) RemoveTopic(topic string) error {
 	return nil
 }
 
-func (s *ClusterTopicStore) GetTopicConnNum(topic string) (int64, error) {
+func (s *ClusterTopicStore) GetTopicConnNum(topic string) (uint64, error) {
 	s.RLock()
 	defer s.RUnlock()
-	return s.storage[topic], nil
+	return uint64(s.storage[topic]), nil
 }
 
-func (s *ClusterTopicStore) Topics() ([]string, error) {
-	s.RLock()
-	defer s.RUnlock()
-	var list []string
-	for k := range s.storage {
-		list = append(list, k)
+func (s *ClusterTopicStore) Topics() (map[string]uint64, error) {
+	result := make(map[string]uint64)
+	for k, v := range result {
+		result[k] = uint64(v)
 	}
-	return list, nil
+	return result, nil
+}
+
+func (s *ClusterTopicStore) ClusterTopics() (map[string]uint64, error) {
+	return s.Topics()
 }

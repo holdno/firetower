@@ -316,7 +316,7 @@ input, button {
 
 	printMsg('system', "连接中...")
 
-	var bt = new firetower("wss://firetower-whq5f2f.xvx.app/ws", function(){
+	var bt = new firetower("ws://localhost:9999/ws", function(){
 		console.log('建立连接')
 		bt.subscribe([subscribe])
 		printMsg('system', "连接成功。欢迎进入基于firetower构建的聊天室，您可以在底部输入框输入内容并发送，当前在线的用户可以接收到该信息。")
