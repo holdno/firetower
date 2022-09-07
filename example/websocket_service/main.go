@@ -53,24 +53,24 @@ func main() {
 	tm, err := towersvc.Setup(config.FireTowerConfig{
 		ChanLens:    1000,
 		Heartbeat:   30,
-		ServiceMode: config.ClusterMode,
+		ServiceMode: config.SingleMode,
 		Bucket: config.BucketConfig{
 			Num:              4,
 			CentralChanCount: 100000,
 			BuffChanCount:    1000,
 			ConsumerNum:      1,
 		},
-		Cluster: config.Cluster{
-			RedisOption: config.Redis{
-				Addr: "localhost:6379",
-			},
-			NatsOption: config.Nats{
-				Addr:       "nats://localhost:4222",
-				UserName:   "firetower",
-				Password:   "firetower",
-				ServerName: "firetower",
-			},
-		},
+		// Cluster: config.Cluster{
+		// 	RedisOption: config.Redis{
+		// 		Addr: "localhost:6379",
+		// 	},
+		// 	NatsOption: config.Nats{
+		// 		Addr:       "nats://localhost:4222",
+		// 		UserName:   "firetower",
+		// 		Password:   "firetower",
+		// 		ServerName: "firetower",
+		// 	},
+		// },
 	})
 
 	if err != nil {
