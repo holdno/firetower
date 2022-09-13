@@ -31,7 +31,7 @@ const (
 )
 
 func (s *ClusterTopicStore) getTopicKey(clientIP string) string {
-	return ClusterTopicKeyPrefix + clientIP
+	return s.provider.keyPrefix + ClusterTopicKeyPrefix + clientIP
 }
 
 func (s *ClusterTopicStore) init() error {

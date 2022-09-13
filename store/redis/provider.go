@@ -10,19 +10,21 @@ import (
 var provider *RedisProvider
 
 type RedisProvider struct {
-	dbconn   *redis.Client
-	clientIP string
+	dbconn    *redis.Client
+	clientIP  string
+	keyPrefix string
 
 	clusterConnStore  store.ClusterConnStore
 	clusterTopicStore store.ClusterTopicStore
 	clusterStore      store.ClusterStore
 }
 
-func Setup(addr, password string, db int, clientIP string) (*RedisProvider, error) {
+func Setup(addr, password string, db int, clientIP, keyPrefix string) (*RedisProvider, error) {
 	if clientIP == "" {
 		panic("setup redis store: required client IP")
 	}
 	provider = &RedisProvider{
+		keyPrefix: keyPrefix,
 		dbconn: redis.NewClient(&redis.Options{
 			Addr:     addr,
 			Password: password, // no password set

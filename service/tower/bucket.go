@@ -164,7 +164,8 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 		} else {
 			if tm.stores, err = redis.Setup(cfg.Cluster.RedisOption.Addr,
 				cfg.Cluster.RedisOption.Password,
-				cfg.Cluster.RedisOption.DB, tm.ip); err != nil {
+				cfg.Cluster.RedisOption.DB, tm.ip,
+				cfg.Cluster.RedisOption.KeyPrefix); err != nil {
 				panic(err)
 			}
 		}

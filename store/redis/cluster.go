@@ -17,6 +17,6 @@ const (
 )
 
 func (s *ClusterStore) ClusterNumber() (int64, error) {
-	res := s.provider.dbconn.Incr(context.TODO(), ClusterKey)
+	res := s.provider.dbconn.Incr(context.TODO(), s.provider.keyPrefix+ClusterKey)
 	return res.Val(), res.Err()
 }

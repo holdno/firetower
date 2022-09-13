@@ -50,7 +50,7 @@ func newClusterConnStore(provider *RedisProvider) *ClusterConnStore {
 }
 
 func (s *ClusterConnStore) init() error {
-	res := s.provider.dbconn.HDel(context.TODO(), ClusterConnKey, s.provider.clientIP)
+	res := s.provider.dbconn.HDel(context.TODO(), s.provider.keyPrefix+ClusterConnKey, s.provider.clientIP)
 	return res.Err()
 }
 
@@ -85,7 +85,7 @@ func (s *ClusterConnStore) OneClientAtomicAddBy(clientIP string, num int64) erro
 	defer s.Unlock()
 	s.storage[clientIP] += num
 
-	res := s.provider.dbconn.HSet(context.TODO(), ClusterConnKey, clientIP, packClientConnNumberNow(uint64(num)))
+	res := s.provider.dbconn.HSet(context.TODO(), s.provider.keyPrefix+ClusterConnKey, clientIP, packClientConnNumberNow(uint64(num)))
 	if res.Err() != nil {
 		s.storage[clientIP] -= num
 		return res.Err()
@@ -94,7 +94,7 @@ func (s *ClusterConnStore) OneClientAtomicAddBy(clientIP string, num int64) erro
 }
 
 func (s *ClusterConnStore) GetAllConnNum() (uint64, error) {
-	res := s.provider.dbconn.HGetAll(context.TODO(), ClusterConnKey)
+	res := s.provider.dbconn.HGetAll(context.TODO(), s.provider.keyPrefix+ClusterConnKey)
 	if res.Err() != nil {
 		return 0, res.Err()
 	}
@@ -110,7 +110,7 @@ func (s *ClusterConnStore) GetAllConnNum() (uint64, error) {
 }
 
 func (s *ClusterConnStore) RemoveClient(clientIP string) error {
-	res := s.provider.dbconn.HDel(context.TODO(), ClusterConnKey, clientIP)
+	res := s.provider.dbconn.HDel(context.TODO(), s.provider.keyPrefix+ClusterConnKey, clientIP)
 	if res.Err() != nil {
 		return res.Err()
 	}
@@ -147,7 +147,7 @@ func (s *ClusterConnStore) KeepClusterClear() {
 		}
 
 		time.Sleep(time.Second)
-		result := s.provider.dbconn.EvalSha(context.TODO(), s.clusterShutdownCheckerScriptSHA, []string{ClusterConnKey, fmt.Sprintf("%d", time.Now().Unix())}, 2)
+		result := s.provider.dbconn.EvalSha(context.TODO(), s.clusterShutdownCheckerScriptSHA, []string{s.provider.keyPrefix + ClusterConnKey, fmt.Sprintf("%d", time.Now().Unix())}, 2)
 		if result.Err() != nil {
 			// todo log
 			continue
@@ -170,7 +170,7 @@ return success
 `
 
 func (s *ClusterConnStore) SelectMaster() {
-	lockKey := "ft_cluster_master"
+	lockKey := s.provider.keyPrefix + "ft_cluster_master"
 	for {
 		res := s.provider.dbconn.SetNX(context.Background(), lockKey, s.provider.clientIP, time.Second*3)
 		if res.Val() {

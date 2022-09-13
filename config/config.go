@@ -22,9 +22,10 @@ type Cluster struct {
 }
 
 type Redis struct {
-	Addr     string
-	Password string
-	DB       int
+	KeyPrefix string
+	Addr      string
+	Password  string
+	DB        int
 }
 
 type Nats struct {
