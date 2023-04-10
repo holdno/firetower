@@ -330,7 +330,7 @@ input, button {
 
 	function Notify(msg) {
 		if (window.Notification && Notification.permission === "granted") {
-			var n = new Notification(msg);
+			new Notification(msg);
 		}
 	}
 
@@ -351,6 +351,7 @@ input, button {
 				break;
 			case 'publish':
 				printMsg(msg.from, msg.data)
+				Notify(msg.data)
 				break;
 			case 'timeout':
 				printMsg(msg.from, msg.data+` <font color="#f00" class='point' onclick="bt.publish(subscribe, {from: user, data: '`+msg.data+`', type: 'publish'})">发送失败(超时):点击重试</font>`)
