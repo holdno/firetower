@@ -12,11 +12,15 @@ import (
 var _ protocol.Pusher = (*pusher)(nil)
 
 func MustSetupNatsPusher(cfg config.Nats, b protocol.Brazier, coder protocol.Coder, topicFunc func() map[string]uint64) protocol.Pusher {
+	if cfg.SubjectPrefix == "" {
+		cfg.SubjectPrefix = "firetower.topic."
+	}
 	p := &pusher{
-		b:            b,
-		coder:        coder,
-		currentTopic: topicFunc,
-		msg:          make(chan *protocol.FireInfo, 10000),
+		subjectPrefix: cfg.SubjectPrefix,
+		b:             b,
+		coder:         coder,
+		currentTopic:  topicFunc,
+		msg:           make(chan *protocol.FireInfo, 10000),
 	}
 	var err error
 	p.nats, err = nats.Connect(cfg.Addr, nats.Name(cfg.ServerName), nats.UserInfo(cfg.UserName, cfg.Password))
@@ -27,16 +31,17 @@ func MustSetupNatsPusher(cfg config.Nats, b protocol.Brazier, coder protocol.Cod
 }
 
 type pusher struct {
-	msg          chan *protocol.FireInfo
-	nats         *nats.Conn
-	once         sync.Once
-	b            protocol.Brazier
-	coder        protocol.Coder
-	currentTopic func() map[string]uint64
+	subjectPrefix string
+	msg           chan *protocol.FireInfo
+	nats          *nats.Conn
+	once          sync.Once
+	b             protocol.Brazier
+	coder         protocol.Coder
+	currentTopic  func() map[string]uint64
 }
 
 func (p *pusher) Publish(fire *protocol.FireInfo) error {
-	msg := nats.NewMsg("firetower.topic." + fire.Message.Topic)
+	msg := nats.NewMsg(p.subjectPrefix + fire.Message.Topic)
 	msg.Header.Set("topic", fire.Message.Topic)
 	msg.Data = p.coder.Encode(fire)
 	return p.nats.PublishMsg(msg)
@@ -44,7 +49,7 @@ func (p *pusher) Publish(fire *protocol.FireInfo) error {
 
 func (p *pusher) Receive() chan *protocol.FireInfo {
 	p.once.Do(func() {
-		p.nats.Subscribe("firetower.topic.>", func(msg *nats.Msg) {
+		p.nats.Subscribe(p.subjectPrefix+">", func(msg *nats.Msg) {
 			topic := msg.Header.Get("topic")
 			if _, exist := p.currentTopic()[topic]; exist {
 				fire := new(protocol.FireInfo)
