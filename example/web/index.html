@@ -290,6 +290,18 @@ input, button {
         dom.scrollTop = dom.scrollHeight
     }
 
+	window.addEventListener("load", function () {
+		// 首先，让我们检查我们是否有权限发出通知
+		// 如果没有，我们就请求获得权限
+		if (window.Notification && Notification.permission !== "granted") {
+			Notification.requestPermission(function (status) {
+				if (Notification.permission !== status) {
+					Notification.permission = status;
+				}
+			});
+		}
+	})
+
 	function RndNum(n){
 	    var rnd="";
 	    for(var i=0;i<n;i++)
@@ -315,6 +327,12 @@ input, button {
 	}
 
 	printMsg('system', "连接中...")
+
+	function Notify(msg) {
+		if (window.Notification && Notification.permission === "granted") {
+			var n = new Notification(msg);
+		}
+	}
 
 	var bt = new firetower("wss://firetower-whq5f2f.zeno.run/ws", function(){
 		console.log('建立连接')

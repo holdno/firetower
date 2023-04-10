@@ -218,6 +218,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 					if topicConnCache[v] == num {
 						continue
 					}
+
 					tower.ToSelf([]byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num)))
 					topicConnCache[v] = num
 				}
