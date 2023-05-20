@@ -331,6 +331,7 @@ func (b *Bucket) consumer() {
 			case protocol.OfflineUserKey:
 				b.offlineUsers(fire)
 			}
+			tm.brazier.Extinguished(fire)
 		}
 	}
 }
@@ -374,9 +375,21 @@ func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 func (b *Bucket) push(message *protocol.FireInfo) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+
+	wsMsg := &protocol.WebSocketMessage{
+		MessageType: message.MessageType,
+		Data:        message.Message.Data,
+	}
+
 	if m, ok := b.topicRelevance[message.Message.Topic]; ok {
 		for _, v := range m {
-			v.Send(message)
+			if v.receivedHandler != nil && !v.receivedHandler(message) {
+				return nil
+			}
+			if v.isClose {
+				return ErrorClose
+			}
+			v.sendOut <- wsMsg
 		}
 		return nil
 	}

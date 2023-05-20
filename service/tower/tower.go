@@ -30,13 +30,13 @@ type FireTower struct {
 	Cookie    []byte // 这里提供给业务放一个存放跟当前连接相关的数据信息
 	startTime time.Time
 
-	readIn    chan *protocol.FireInfo // 读取队列
-	sendOut   chan *protocol.FireInfo // 发送队列
-	ws        *websocket.Conn         // 保存底层websocket连接
-	topic     map[string]bool         // 订阅topic列表
-	isClose   bool                    // 判断当前websocket是否被关闭
-	closeChan chan struct{}           // 用来作为关闭websocket的触发点
-	mutex     sync.Mutex              // 避免并发close chan
+	readIn    chan *protocol.FireInfo         // 读取队列
+	sendOut   chan *protocol.WebSocketMessage // 发送队列
+	ws        *websocket.Conn                 // 保存底层websocket连接
+	topic     map[string]bool                 // 订阅topic列表
+	isClose   bool                            // 判断当前websocket是否被关闭
+	closeChan chan struct{}                   // 用来作为关闭websocket的触发点
+	mutex     sync.Mutex                      // 避免并发close chan
 
 	onConnectHandler       func() bool
 	onOfflineHandler       func()
@@ -94,7 +94,7 @@ func buildNewTower(ws *websocket.Conn, clientID string) *FireTower {
 	t.clientID = clientID
 	t.startTime = time.Now()
 	t.readIn = make(chan *protocol.FireInfo, tm.cfg.ChanLens)
-	t.sendOut = make(chan *protocol.FireInfo, tm.cfg.ChanLens)
+	t.sendOut = make(chan *protocol.WebSocketMessage, tm.cfg.ChanLens)
 	t.topic = make(map[string]bool)
 	t.ws = ws
 	t.isClose = false
@@ -179,19 +179,6 @@ func (t *FireTower) read() (*protocol.FireInfo, error) {
 	return <-t.readIn, nil
 }
 
-// Send 发送消息方法
-// 向某个topic发送某段信息
-func (t *FireTower) Send(fire *protocol.FireInfo) error {
-	if t.receivedHandler != nil && !t.receivedHandler(fire) {
-		return nil
-	}
-	if t.isClose {
-		return ErrorClose
-	}
-	t.sendOut <- fire
-	return nil
-}
-
 // Close 关闭客户端连接并注销
 // 调用该方法会完全注销掉由BuildTower生成的一切内容
 func (t *FireTower) Close() {
@@ -233,12 +220,11 @@ func (t *FireTower) sendLoop() {
 	heartTicker := time.NewTicker(time.Duration(tm.cfg.Heartbeat) * time.Second)
 	for {
 		select {
-		case fire := <-t.sendOut:
-			if fire.MessageType == 0 {
-				fire.MessageType = 1 // 文本格式
+		case wsMsg := <-t.sendOut:
+			if wsMsg.MessageType == 0 {
+				wsMsg.MessageType = websocket.TextMessage // 文本格式
 			}
-			if err := t.ws.WriteMessage(fire.MessageType, []byte(fire.Message.Data)); err != nil {
-				fire.Panic(err.Error())
+			if err := t.ws.WriteMessage(wsMsg.MessageType, wsMsg.Data); err != nil {
 				goto collapse
 			}
 		case <-heartTicker.C:
@@ -281,7 +267,9 @@ func (t *FireTower) readLoop() {
 				t.readTimeoutHandler(fire)
 			}
 			fire.Panic(fmt.Sprintf("readLoop timeout: %q", data))
+			tm.brazier.Extinguished(fire)
 		case <-t.closeChan:
+			tm.brazier.Extinguished(fire)
 			return
 		}
 	}
@@ -299,41 +287,48 @@ func (t *FireTower) readDispose() {
 			t.Close()
 			return
 		}
-		// protocol.RecycleIn(fire, "readDispose")
-		defer tm.brazier.Extinguished(fire)
-		if t.isClose {
-			return
-		} else {
-			if fire.Message.Topic == "" {
-				fire.Panic(fmt.Sprintf("%s:topic is empty, ClintId:%s, UserId:%s", fire.Message.Type, t.ClientID(), t.UserID()))
-				continue
+		t.readLogic(fire)
+	}
+}
+
+func (t *FireTower) readLogic(fire *protocol.FireInfo) error {
+	// protocol.RecycleIn(fire, "readDispose")
+	defer tm.brazier.Extinguished(fire)
+	if t.isClose {
+		return nil
+	} else {
+		if fire.Message.Topic == "" {
+			fire.Panic(fmt.Sprintf("%s:topic is empty, ClintId:%s, UserId:%s", fire.Message.Type, t.ClientID(), t.UserID()))
+			return fmt.Errorf("%s:topic is empty, ClintId:%s, UserId:%s", fire.Message.Type, t.ClientID(), t.UserID())
+		}
+		switch fire.Message.Type {
+		case "subscribe": // 客户端订阅topic
+			addTopics := strings.Split(fire.Message.Topic, ",")
+			// 增加messageId 方便追踪
+			err := t.Subscribe(fire.Context, addTopics)
+			if err != nil {
+				fire.Error(err.Error())
+				return err
 			}
-			switch fire.Message.Type {
-			case "subscribe": // 客户端订阅topic
-				addTopics := strings.Split(fire.Message.Topic, ",")
-				// 增加messageId 方便追踪
-				err = t.Subscribe(fire.Context, addTopics)
-				if err != nil {
-					fire.Error(err.Error())
-				}
-			case "unSubscribe": // 客户端取消订阅topic
-				delTopic := strings.Split(fire.Message.Topic, ",")
-				err = t.UnSubscribe(fire.Context, delTopic)
-				if err != nil {
-					fire.Error(err.Error())
-				}
-			default:
-				if t.readHandler != nil {
-					ok := t.readHandler(fire)
-					if !ok {
-						fire.Panic("readHandler return false")
-						t.Close()
-						return
-					}
+		case "unSubscribe": // 客户端取消订阅topic
+			delTopic := strings.Split(fire.Message.Topic, ",")
+			err := t.UnSubscribe(fire.Context, delTopic)
+			if err != nil {
+				fire.Error(err.Error())
+				return err
+			}
+		default:
+			if t.readHandler != nil {
+				ok := t.readHandler(fire)
+				if !ok {
+					fire.Panic("readHandler return false")
+					t.Close()
+					return nil
 				}
 			}
 		}
 	}
+	return nil
 }
 
 func (t *FireTower) Subscribe(context protocol.FireLife, topics []string) error {
@@ -384,7 +379,7 @@ func (t *FireTower) Publish(fire *protocol.FireInfo) error {
 // 只针对当前客户端进行的推送请调用该方法
 func (t *FireTower) ToSelf(b []byte) error {
 	if t.isClose != true {
-		return t.ws.WriteMessage(1, b)
+		return t.ws.WriteMessage(websocket.TextMessage, b)
 	}
 	return ErrorClose
 }

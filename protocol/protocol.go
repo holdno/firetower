@@ -36,6 +36,11 @@ func init() {
 	FireLogger = fireLog
 }
 
+type WebSocketMessage struct {
+	MessageType int
+	Data        []byte
+}
+
 // FireInfo 接收的消息结构体
 type FireInfo struct {
 	Context     FireLife     `json:"c"`
