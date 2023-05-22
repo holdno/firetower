@@ -48,6 +48,10 @@ type FireInfo struct {
 	Message     TopicMessage `json:"m"`
 }
 
+func (f *FireInfo) Copy() FireInfo {
+	return *f
+}
+
 // TopicMessage 话题信息结构体
 type TopicMessage struct {
 	Topic string          `json:"topic"`
@@ -91,18 +95,4 @@ func (f *FireLife) Reset(source FireSource, clientID, userID string) {
 	f.ClientID = clientID
 	f.UserID = userID
 	f.Source = source
-}
-
-func RecycleIn(fire *FireInfo, where string) {
-	if fire.Context.ExtMeta == nil {
-		fire.Context.ExtMeta = make(map[string]string)
-	}
-	fire.Context.ExtMeta["fire_recycle"] = where
-}
-
-func IsRecycleIn(fire *FireInfo, where string) bool {
-	if fire.Context.ExtMeta == nil {
-		return where == ""
-	}
-	return fire.Context.ExtMeta["fire_recycle"] == where
 }

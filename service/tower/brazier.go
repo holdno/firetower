@@ -5,10 +5,14 @@ import (
 )
 
 type brazier struct {
+	len int
 }
 
 func (b *brazier) Extinguished(fire *protocol.FireInfo) {
-	fire.Info("Extinguished")
+	if b.len > 100000 {
+		return
+	}
+	b.len++
 	fire.MessageType = 0
 	fire.Message.Data = []byte("")
 	fire.Message.Topic = ""
@@ -17,6 +21,7 @@ func (b *brazier) Extinguished(fire *protocol.FireInfo) {
 }
 
 func (b *brazier) LightAFire() *protocol.FireInfo {
+	b.len--
 	return firePool.Get().(*protocol.FireInfo)
 }
 

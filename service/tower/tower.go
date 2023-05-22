@@ -292,7 +292,6 @@ func (t *FireTower) readDispose() {
 }
 
 func (t *FireTower) readLogic(fire *protocol.FireInfo) error {
-	// protocol.RecycleIn(fire, "readDispose")
 	defer tm.brazier.Extinguished(fire)
 	if t.isClose {
 		return nil
@@ -321,10 +320,9 @@ func (t *FireTower) readLogic(fire *protocol.FireInfo) error {
 			if t.readHandler != nil {
 				ok := t.readHandler(fire)
 				if !ok {
-					fire.Panic("readHandler return false")
-					t.Close()
 					return nil
 				}
+				t.Publish(fire)
 			}
 		}
 	}
@@ -363,9 +361,6 @@ func (t *FireTower) UnSubscribe(context protocol.FireLife, topics []string) erro
 // Publish 推送接口
 // 通过BuildTower生成的实例都可以调用该方法来达到推送的目的
 func (t *FireTower) Publish(fire *protocol.FireInfo) error {
-	if protocol.IsRecycleIn(fire, "") {
-		defer tm.brazier.Extinguished(fire)
-	}
 	err := tm.Publish(fire)
 	if err != nil {
 		fire.Panic(fmt.Sprintf("publish err: %v", err))

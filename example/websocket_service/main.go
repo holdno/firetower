@@ -106,6 +106,8 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	tower := towersvc.BuildTower(ws, strconv.FormatInt(id, 10))
 
 	tower.SetReadHandler(func(fire *protocol.FireInfo) bool {
+		f := fire.Copy()
+		tower.Publish(&f)
 		// fire将会在handler执行结束后被回收
 		messageInfo := new(messageInfo)
 		err := json.Unmarshal(fire.Message.Data, messageInfo)
