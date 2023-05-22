@@ -106,8 +106,6 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	tower := towersvc.BuildTower(ws, strconv.FormatInt(id, 10))
 
 	tower.SetReadHandler(func(fire *protocol.FireInfo) bool {
-		f := fire.Copy()
-		tower.Publish(&f)
 		// fire将会在handler执行结束后被回收
 		messageInfo := new(messageInfo)
 		err := json.Unmarshal(fire.Message.Data, messageInfo)
@@ -123,7 +121,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 			messageInfo.Type = "event"
 			fire.Message.Data, _ = json.Marshal(messageInfo)
 			tower.ToSelf(fire.Message.Data)
-			return true
+			return false
 		case strings.HasPrefix(msg, "/room "):
 			if err = tower.UnSubscribe(fire.Context, tower.TopicList()); err != nil {
 				messageInfo.From = "system"
@@ -131,7 +129,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 				messageInfo.Data = []byte(fmt.Sprintf(`{"type": "error", "msg": "切换房间失败, %s"}`, err.Error()))
 				fire.Message.Data, _ = json.Marshal(messageInfo)
 				tower.ToSelf(fire.Message.Data)
-				return true
+				return false
 			}
 			roomCode := strings.TrimLeft(msg, "/room ")
 			if err = tower.Subscribe(fire.Context, []string{"/chat/" + roomCode}); err != nil {
@@ -140,10 +138,10 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 				messageInfo.Data = []byte(fmt.Sprintf(`{"type": "error", "msg": "切换房间失败, %s, 请重新尝试"}`, err.Error()))
 				fire.Message.Data, _ = json.Marshal(messageInfo)
 				tower.ToSelf(fire.Message.Data)
-				return true
+				return false
 			}
 
-			return true
+			return false
 		}
 
 		if tower.UserID() == "" {
@@ -153,7 +151,6 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		fire.Message.Data, _ = json.Marshal(messageInfo)
 		// 做发送验证
 		// 判断发送方是否有权限向到达方发送内容
-		tower.Publish(fire)
 		return true
 	})
 
