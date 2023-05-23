@@ -1,6 +1,9 @@
 package protocol
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 type Pusher interface {
 	Publish(fire *FireInfo) error
@@ -26,9 +29,11 @@ func (s *SinglePusher) Receive() chan *FireInfo {
 			for {
 				select {
 				case m := <-s.msg:
+					// todo get from pool
 					fire := new(FireInfo)
 					err := s.coder.Decode(m, fire)
 					if err != nil {
+						fmt.Println("receive decode error", err)
 						// todo log
 						continue
 					}

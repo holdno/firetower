@@ -1,17 +1,20 @@
 package tower
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/holdno/firetower/config"
+	"github.com/holdno/firetower/pkg/log"
 	"github.com/holdno/firetower/pkg/nats"
 	"github.com/holdno/firetower/protocol"
 	"github.com/holdno/firetower/store"
 	"github.com/holdno/firetower/store/redis"
 	"github.com/holdno/firetower/store/single"
 	"github.com/holdno/firetower/utils"
+	"go.uber.org/zap"
 
 	"github.com/holdno/rego"
 )
@@ -48,8 +51,8 @@ type TowerManager struct {
 	ip          string
 	clusterID   int64
 
-	stores stores
-
+	stores       stores
+	logger       *zap.Logger
 	topicCounter chan counterMsg
 	connCounter  chan counterMsg
 
@@ -119,6 +122,12 @@ func BuildWithClusterID(id int64) TowerOption {
 	}
 }
 
+func BuildWithLogger(logger *zap.Logger) TowerOption {
+	return func(t *TowerManager) {
+		t.logger = logger
+	}
+}
+
 func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, error) {
 	tm = &TowerManager{
 		cfg:          cfg,
@@ -128,6 +137,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 		connCounter:  make(chan counterMsg, 200000),
 		closeChan:    make(chan struct{}),
 		brazier:      &brazier{},
+		logger:       log.New(log.Config{Level: zap.DebugLevel}),
 	}
 
 	for _, opt := range opts {
@@ -255,7 +265,6 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 				for i := range tm.bucket {
 					tm.bucket[i].BuffChan <- fire
 				}
-				fire.Info("Sended")
 			case <-tm.closeChan:
 				return
 			}
@@ -321,8 +330,6 @@ func (b *Bucket) consumer() {
 		select {
 		case fire := <-b.BuffChan:
 			switch fire.Message.Type {
-			case protocol.PublishKey:
-				b.push(fire)
 			case protocol.OfflineTopicByUserIdKey:
 				// 需要退订的topic和user_id
 				b.unSubscribeByUserId(fire)
@@ -330,8 +337,9 @@ func (b *Bucket) consumer() {
 				b.unSubscribeAll(fire)
 			case protocol.OfflineUserKey:
 				b.offlineUsers(fire)
+			default:
+				b.push(fire)
 			}
-			tm.brazier.Extinguished(fire)
 		}
 	}
 }
@@ -380,6 +388,8 @@ func (b *Bucket) push(message *protocol.FireInfo) error {
 		MessageType: message.MessageType,
 		Data:        message.Message.Data,
 	}
+
+	fmt.Println("push data", wsMsg.MessageType, string(wsMsg.Data))
 
 	if m, ok := b.topicRelevance[message.Message.Topic]; ok {
 		for _, v := range m {

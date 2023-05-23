@@ -1,12 +1,14 @@
 package tower
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 
 	"github.com/holdno/firetower/config"
 	"github.com/holdno/firetower/protocol"
@@ -14,9 +16,6 @@ import (
 )
 
 var (
-	// TowerLogger 接管系统log t log类型 info log信息
-	TowerLogger func(t *FireTower, types, info string)
-
 	towerPool sync.Pool
 )
 
@@ -30,6 +29,7 @@ type FireTower struct {
 	Cookie    []byte // 这里提供给业务放一个存放跟当前连接相关的数据信息
 	startTime time.Time
 
+	logger    *zap.Logger
 	readIn    chan *protocol.FireInfo         // 读取队列
 	sendOut   chan *protocol.WebSocketMessage // 发送队列
 	ws        *websocket.Conn                 // 保存底层websocket连接
@@ -67,22 +67,19 @@ func (t *FireTower) Ext() sync.Map {
 
 // Init 初始化firetower
 // 在调用firetower前请一定要先调用Init方法
-func Setup(cfg config.FireTowerConfig) (Manager, error) {
+func Setup(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, error) {
 	towerPool.New = func() interface{} {
 		return &FireTower{}
 	}
-
-	TowerLogger = towerLog
-
 	// 构建服务架构
-	return BuildFoundation(cfg)
+	return BuildFoundation(cfg, opts...)
 }
 
 // BuildTower 实例化一个websocket客户端
-func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower) {
+func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower, err error) {
 	if ws == nil {
-		towerLog(tower, "ERROR", "websocket.Conn is nil")
-		return
+		tm.logger.Error("empty websocket connect")
+		return nil, errors.New("empty websocket connect")
 	}
 	tower = buildNewTower(ws, clientId)
 	return
@@ -105,6 +102,9 @@ func buildNewTower(ws *websocket.Conn, clientID string) *FireTower {
 	t.subscribeHandler = nil
 	t.unSubscribeHandler = nil
 	t.beforeSubscribeHandler = nil
+
+	t.logger = tm.logger.With(zap.String("client_id", t.clientID), zap.String("user_id", t.userID))
+
 	return t
 }
 
@@ -114,7 +114,7 @@ func (t *FireTower) OnClose() chan struct{} {
 
 // Run 启动websocket客户端
 func (t *FireTower) Run() {
-	logInfo(t, "new websocket running")
+	t.logger.Debug("new tower builded")
 	tm.connCounter <- counterMsg{
 		Key: tm.ip,
 		Num: 1,
@@ -182,7 +182,7 @@ func (t *FireTower) read() (*protocol.FireInfo, error) {
 // Close 关闭客户端连接并注销
 // 调用该方法会完全注销掉由BuildTower生成的一切内容
 func (t *FireTower) Close() {
-	logInfo(t, "websocket connect is closed")
+	t.logger.Debug("close connect")
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if !t.isClose {
@@ -193,11 +193,12 @@ func (t *FireTower) Close() {
 				topicSlice = append(topicSlice, k)
 			}
 			delTopic, err := t.unbindTopic(topicSlice)
-			fire := NewFire(protocol.SourceSystem, t)
-			defer tm.brazier.Extinguished(fire)
 			if err != nil {
-				fire.Panic(err.Error())
+				t.logger.Error("faied to unbind topic when tower closed")
 			} else {
+				fire := NewFire(protocol.SourceSystem, t)
+				defer tm.brazier.Extinguished(fire)
+
 				if t.unSubscribeHandler != nil {
 					t.unSubscribeHandler(fire.Context, delTopic)
 				}
@@ -244,7 +245,7 @@ collapse:
 func (t *FireTower) readLoop() {
 	defer func() {
 		if err := recover(); err != nil {
-			towerLog(t, "PANIC", fmt.Sprintf("%s", err))
+			tm.logger.Error("readloop panic", zap.Any("error", err))
 		}
 	}()
 	for {
@@ -255,7 +256,7 @@ func (t *FireTower) readLoop() {
 		fire := NewFire(protocol.SourceClient, t) // 从对象池中获取消息对象 降低GC压力
 		fire.MessageType = messageType
 		if err := json.Unmarshal(data, &fire.Message); err != nil {
-			fire.Panic(fmt.Sprintf("client sended data was unmarshal error:%v", err))
+			t.logger.Error("failed to unmarshal client data, filtered", zap.Error(err))
 			continue
 		}
 
@@ -266,7 +267,7 @@ func (t *FireTower) readLoop() {
 			if t.readTimeoutHandler != nil {
 				t.readTimeoutHandler(fire)
 			}
-			fire.Panic(fmt.Sprintf("readLoop timeout: %q", data))
+			t.logger.Error("readloop timeout", zap.Any("data", data))
 			tm.brazier.Extinguished(fire)
 		case <-t.closeChan:
 			tm.brazier.Extinguished(fire)
@@ -283,7 +284,7 @@ func (t *FireTower) readDispose() {
 	for {
 		fire, err := t.read()
 		if err != nil {
-			fire.Panic(fmt.Sprintf("read message failed:%v", err))
+			t.logger.Error("failed to read message from websocket, tower will be closed", zap.Error(err))
 			t.Close()
 			return
 		}
@@ -297,7 +298,7 @@ func (t *FireTower) readLogic(fire *protocol.FireInfo) error {
 		return nil
 	} else {
 		if fire.Message.Topic == "" {
-			fire.Panic(fmt.Sprintf("%s:topic is empty, ClintId:%s, UserId:%s", fire.Message.Type, t.ClientID(), t.UserID()))
+			t.logger.Error("the obtained topic is empty. this message will be filtered")
 			return fmt.Errorf("%s:topic is empty, ClintId:%s, UserId:%s", fire.Message.Type, t.ClientID(), t.UserID())
 		}
 		switch fire.Message.Type {
@@ -306,14 +307,16 @@ func (t *FireTower) readLogic(fire *protocol.FireInfo) error {
 			// 增加messageId 方便追踪
 			err := t.Subscribe(fire.Context, addTopics)
 			if err != nil {
-				fire.Error(err.Error())
+				t.logger.Error("failed to subscribe topics", zap.Strings("topics", addTopics), zap.Error(err))
+				// TODO metrics
 				return err
 			}
 		case "unSubscribe": // 客户端取消订阅topic
 			delTopic := strings.Split(fire.Message.Topic, ",")
 			err := t.UnSubscribe(fire.Context, delTopic)
 			if err != nil {
-				fire.Error(err.Error())
+				t.logger.Error("failed to unsubscribe topics", zap.Strings("topics", delTopic), zap.Error(err))
+				// TODO metrics
 				return err
 			}
 		default:
@@ -363,7 +366,7 @@ func (t *FireTower) UnSubscribe(context protocol.FireLife, topics []string) erro
 func (t *FireTower) Publish(fire *protocol.FireInfo) error {
 	err := tm.Publish(fire)
 	if err != nil {
-		fire.Panic(fmt.Sprintf("publish err: %v", err))
+		t.logger.Error("failed to publish message", zap.Error(err))
 		return err
 	}
 	return nil
@@ -429,11 +432,14 @@ func (t *FireTower) SetOnSystemRemove(fn func(topic string)) {
 }
 
 // GetConnectNum 获取话题订阅数的grpc方法封装
-func (t *FireTower) GetConnectNum(topic string) uint64 {
+func (t *FireTower) GetConnectNum(topic string) (uint64, error) {
 	number, err := tm.stores.ClusterTopicStore().GetTopicConnNum(topic)
 	if err != nil {
-		// todo log & warning
-		return 0
+		return 0, err
 	}
-	return number
+	return number, nil
+}
+
+func (t *FireTower) Logger() *zap.Logger {
+	return t.logger
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/holdno/firetower/utils"
 	"github.com/holdno/snowFlakeByGo"
 	json "github.com/json-iterator/go"
+	"go.uber.org/zap"
 )
 
 var upgrader = websocket.Upgrader{
@@ -103,7 +104,12 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	ws, _ := upgrader.Upgrade(w, r, nil)
 
 	id := utils.IDWorker().GetId()
-	tower := towersvc.BuildTower(ws, strconv.FormatInt(id, 10))
+	tower, err := towersvc.BuildTower(ws, strconv.FormatInt(id, 10))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
 
 	tower.SetReadHandler(func(fire *protocol.FireInfo) bool {
 		// fire将会在handler执行结束后被回收
@@ -213,7 +219,11 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 				return
 			case <-ticker.C:
 				for _, v := range tower.TopicList() {
-					num := tower.GetConnectNum(v)
+					num, err := tower.GetConnectNum(v)
+					if err != nil {
+						tower.Logger().Error("failed to get connect number", zap.Error(err))
+						continue
+					}
 					if topicConnCache[v] == num {
 						continue
 					}

@@ -27,15 +27,6 @@ type Coder interface {
 	Encode(msg *FireInfo) []byte
 }
 
-var (
-	// FireLogger 接管链接log t log类型 info log信息
-	FireLogger func(f *FireInfo, types, info string)
-)
-
-func init() {
-	FireLogger = fireLog
-}
-
 type WebSocketMessage struct {
 	MessageType int
 	Data        []byte
@@ -62,21 +53,6 @@ type TopicMessage struct {
 type TowerInfo interface {
 	UserID() string
 	ClientID() string
-}
-
-// Panic 消息的panic日志 并回收变量
-func (f *FireInfo) Panic(info string) {
-	FireLogger(f, "Panic", info)
-}
-
-// Info 记录一个INFO级别的日志
-func (f *FireInfo) Info(info string) {
-	FireLogger(f, "INFO", info)
-}
-
-// Error 记录一个ERROR级别的日志
-func (f *FireInfo) Error(info string) {
-	FireLogger(f, "ERROR", info)
 }
 
 // FireLife 客户端推送消息的结构体
