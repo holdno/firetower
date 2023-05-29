@@ -1,7 +1,6 @@
 package tower
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -155,9 +154,9 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 
 	if tm.Pusher == nil {
 		if cfg.ServiceMode == config.SingleMode {
-			tm.Pusher = protocol.DefaultPusher(tm.brazier, tm.coder)
+			tm.Pusher = protocol.DefaultPusher(tm.brazier, tm.coder, tm.logger)
 		} else {
-			tm.Pusher = nats.MustSetupNatsPusher(cfg.Cluster.NatsOption, tm.brazier, tm.coder, func() map[string]uint64 {
+			tm.Pusher = nats.MustSetupNatsPusher(cfg.Cluster.NatsOption, tm.coder, func() map[string]uint64 {
 				m, err := tm.stores.ClusterTopicStore().Topics()
 				if err != nil {
 					//todo log
@@ -389,8 +388,6 @@ func (b *Bucket) push(message *protocol.FireInfo) error {
 		Data:        message.Message.Data,
 	}
 
-	fmt.Println("push data", wsMsg.MessageType, string(wsMsg.Data))
-
 	if m, ok := b.topicRelevance[message.Message.Topic]; ok {
 		for _, v := range m {
 			if v.receivedHandler != nil && !v.receivedHandler(message) {
@@ -409,14 +406,12 @@ func (b *Bucket) push(message *protocol.FireInfo) error {
 // UnSubscribeByUserId 服务端指定某个用户退订某个topic
 func (b *Bucket) unSubscribeByUserId(fire *protocol.FireInfo) error {
 	b.mu.RLock()
-	defer b.mu.RUnlock()
 	if m, ok := b.topicRelevance[fire.Message.Topic]; ok {
+		b.mu.RUnlock()
 		userId := string(fire.Message.Data)
 		for _, v := range m {
 			if v.UserID() == userId {
 				_, err := v.unbindTopic([]string{fire.Message.Topic})
-				fire := NewFire(protocol.SourceSystem, v)
-				defer tm.brazier.Extinguished(fire)
 				if v.unSubscribeHandler != nil {
 					v.unSubscribeHandler(fire.Context, []string{fire.Message.Topic})
 				}
@@ -426,7 +421,9 @@ func (b *Bucket) unSubscribeByUserId(fire *protocol.FireInfo) error {
 				return nil
 			}
 		}
+		return nil
 	}
+	b.mu.RUnlock()
 	return ErrorTopicEmpty
 }
 
