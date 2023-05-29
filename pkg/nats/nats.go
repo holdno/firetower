@@ -18,7 +18,6 @@ func MustSetupNatsPusher(cfg config.Nats, coder protocol.Coder, logger *zap.Logg
 	}
 	p := &pusher{
 		subjectPrefix: cfg.SubjectPrefix,
-		b:             b,
 		coder:         coder,
 		currentTopic:  topicFunc,
 		msg:           make(chan *protocol.FireInfo, 10000),

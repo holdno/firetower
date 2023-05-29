@@ -156,9 +156,10 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 		if cfg.ServiceMode == config.SingleMode {
 			tm.Pusher = protocol.DefaultPusher(tm.brazier, tm.coder, tm.logger)
 		} else {
-			tm.Pusher = nats.MustSetupNatsPusher(cfg.Cluster.NatsOption, tm.coder, func() map[string]uint64 {
+			tm.Pusher = nats.MustSetupNatsPusher(cfg.Cluster.NatsOption, tm.coder, tm.logger, func() map[string]uint64 {
 				m, err := tm.stores.ClusterTopicStore().Topics()
 				if err != nil {
+					tm.logger.Error("failed to ")
 					//todo log
 					return map[string]uint64{}
 				}
