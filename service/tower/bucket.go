@@ -13,9 +13,10 @@ import (
 	"github.com/holdno/firetower/store/redis"
 	"github.com/holdno/firetower/store/single"
 	"github.com/holdno/firetower/utils"
-	"go.uber.org/zap"
 
 	"github.com/holdno/rego"
+	cmap "github.com/orcaman/concurrent-map/v2"
+	"go.uber.org/zap"
 )
 
 var (
@@ -88,11 +89,12 @@ type stores interface {
 
 // Bucket 的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
 type Bucket struct {
-	mu             sync.RWMutex // 读写锁，可并发读不可并发读写
-	id             int64
-	len            int64
-	topicRelevance map[string]map[string]*FireTower // topic -> websocket clientid -> websocket conn
-	BuffChan       chan *protocol.FireInfo          // bucket的消息处理队列
+	mu  sync.RWMutex // 读写锁，可并发读不可并发读写
+	id  int64
+	len int64
+	// topicRelevance map[string]map[string]*FireTower // topic -> websocket clientid -> websocket conn
+	topicRelevance cmap.ConcurrentMap[string, cmap.ConcurrentMap[string, *FireTower]]
+	BuffChan       chan *protocol.FireInfo // bucket的消息处理队列
 }
 
 type TowerOption func(t *TowerManager)
@@ -289,7 +291,7 @@ func newBucket(buff int64, consumerNum int) *Bucket {
 	b := &Bucket{
 		id:             getNewBucketId(),
 		len:            0,
-		topicRelevance: make(map[string]map[string]*FireTower),
+		topicRelevance: cmap.New[cmap.ConcurrentMap[string, *FireTower]](),
 		BuffChan:       make(chan *protocol.FireInfo, buff),
 	}
 
@@ -346,14 +348,13 @@ func (b *Bucket) consumer() {
 
 // AddSubscribe 添加当前实例中的topic->conn的订阅关系
 func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
-	b.mu.Lock()
-	if m, ok := b.topicRelevance[topic]; ok {
-		m[bt.ClientID()] = bt
+	if m, ok := b.topicRelevance.Get(topic); ok {
+		m.Set(bt.ClientID(), bt)
 	} else {
-		b.topicRelevance[topic] = make(map[string]*FireTower)
-		b.topicRelevance[topic][bt.ClientID()] = bt
+		inner := cmap.New[*FireTower]()
+		inner.Set(topic, bt)
+		b.topicRelevance.Set(topic, inner)
 	}
-	b.mu.Unlock()
 	tm.topicCounter <- counterMsg{
 		Key: topic,
 		Num: 1,
@@ -362,14 +363,13 @@ func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
 
 // DelSubscribe 删除当前实例中的topic->conn的订阅关系
 func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
-	b.mu.Lock()
-	if m, ok := b.topicRelevance[topic]; ok {
-		delete(m, bt.ClientID())
-		if len(m) == 0 {
-			delete(b.topicRelevance, topic)
+	if inner, ok := b.topicRelevance.Get(topic); ok {
+		inner.Remove(bt.clientID)
+		if inner.IsEmpty() {
+			b.topicRelevance.Remove(topic)
 		}
 	}
-	b.mu.Unlock()
+
 	tm.topicCounter <- counterMsg{
 		Key: topic,
 		Num: -1,
@@ -381,22 +381,20 @@ func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 // 在推送时每个bucket同时调用Push方法 来达到并发推送
 // 该方法主要通过遍历桶中的topic->conn订阅关系来进行websocket写入
 func (b *Bucket) push(message *protocol.FireInfo) error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	wsMsg := &protocol.WebSocketMessage{
-		MessageType: message.MessageType,
-		Data:        message.Message.Data,
-	}
-
-	if m, ok := b.topicRelevance[message.Message.Topic]; ok {
-		for _, v := range m {
-			if v.receivedHandler != nil && !v.receivedHandler(message) {
-				return nil
-			}
+	if m, ok := b.topicRelevance.Get(message.Message.Topic); ok {
+		wsMsg := &protocol.WebSocketMessage{
+			MessageType: message.MessageType,
+			Data:        message.Message.Data,
+		}
+		for _, v := range m.Items() {
 			if v.isClose {
 				return ErrorClose
 			}
+
+			if v.receivedHandler != nil && !v.receivedHandler(message) {
+				return nil
+			}
+
 			v.sendOut <- wsMsg
 		}
 		return nil
