@@ -159,7 +159,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 			tm.Pusher = nats.MustSetupNatsPusher(cfg.Cluster.NatsOption, tm.coder, tm.logger, func() map[string]uint64 {
 				m, err := tm.stores.ClusterTopicStore().Topics()
 				if err != nil {
-					tm.logger.Error("failed to ")
+					tm.logger.Error("failed to get current node topics", zap.Error(err))
 					//todo log
 					return map[string]uint64{}
 				}

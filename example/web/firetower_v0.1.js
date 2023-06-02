@@ -66,6 +66,8 @@ function firetower(addr, onopen) {
 			topic: topicArr.join(','),
 			data: ''
         }))
+
+		
 	}
 
 	this.unsubscribe = function(topicArr){
