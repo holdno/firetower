@@ -52,9 +52,9 @@ var systemer *SystemPusher
 func main() {
 	// 全局唯一id生成器
 	tm, err := towersvc.Setup(config.FireTowerConfig{
-		ChanLens:    1000,
-		Heartbeat:   30,
-		ServiceMode: config.SingleMode,
+		WriteChanLens: 1000,
+		Heartbeat:     30,
+		ServiceMode:   config.SingleMode,
 		Bucket: config.BucketConfig{
 			Num:              4,
 			CentralChanCount: 100000,

@@ -30,13 +30,13 @@ type FireTower struct {
 	startTime time.Time
 
 	logger    *zap.Logger
-	readIn    chan *protocol.FireInfo         // 读取队列
-	sendOut   chan *protocol.WebSocketMessage // 发送队列
-	ws        *websocket.Conn                 // 保存底层websocket连接
-	topic     sync.Map                        // 订阅topic列表
-	isClose   bool                            // 判断当前websocket是否被关闭
-	closeChan chan struct{}                   // 用来作为关闭websocket的触发点
-	mutex     sync.Mutex                      // 避免并发close chan
+	readIn    chan *protocol.FireInfo // 读取队列
+	sendOut   chan *protocol.FireInfo // 发送队列
+	ws        *websocket.Conn         // 保存底层websocket连接
+	topic     sync.Map                // 订阅topic列表
+	isClose   bool                    // 判断当前websocket是否被关闭
+	closeChan chan struct{}           // 用来作为关闭websocket的触发点
+	mutex     sync.Mutex              // 避免并发close chan
 
 	onConnectHandler       func() bool
 	onOfflineHandler       func()
@@ -90,8 +90,8 @@ func buildNewTower(ws *websocket.Conn, clientID string) *FireTower {
 	t.connID = getConnId()
 	t.clientID = clientID
 	t.startTime = time.Now()
-	t.readIn = make(chan *protocol.FireInfo, tm.cfg.ChanLens)
-	t.sendOut = make(chan *protocol.WebSocketMessage, tm.cfg.ChanLens)
+	t.readIn = make(chan *protocol.FireInfo, tm.cfg.ReadChanLens)
+	t.sendOut = make(chan *protocol.FireInfo, tm.cfg.WriteChanLens)
 	t.topic = sync.Map{}
 	t.ws = ws
 	t.isClose = false
@@ -236,7 +236,7 @@ func (t *FireTower) sendLoop() {
 			if wsMsg.MessageType == 0 {
 				wsMsg.MessageType = websocket.TextMessage // 文本格式
 			}
-			if err := t.ws.WriteMessage(wsMsg.MessageType, wsMsg.Data); err != nil {
+			if err := t.ws.WriteMessage(wsMsg.MessageType, wsMsg.Message.Json()); err != nil {
 				goto collapse
 			}
 		case <-heartTicker.C:

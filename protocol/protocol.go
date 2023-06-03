@@ -1,9 +1,10 @@
 package protocol
 
 import (
-	"encoding/json"
 	"strconv"
 	"time"
+
+	json "github.com/json-iterator/go"
 
 	"github.com/holdno/firetower/utils"
 )
@@ -48,6 +49,11 @@ type TopicMessage struct {
 	Topic string          `json:"topic"`
 	Data  json.RawMessage `json:"data"` // 可能是个json
 	Type  string          `json:"type"`
+}
+
+func (s *TopicMessage) Json() []byte {
+	raw, _ := json.Marshal(s)
+	return raw
 }
 
 type TowerInfo interface {

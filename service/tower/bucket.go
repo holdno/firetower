@@ -390,10 +390,6 @@ func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 // 该方法主要通过遍历桶中的topic->conn订阅关系来进行websocket写入
 func (b *Bucket) push(message *protocol.FireInfo) error {
 	if m, ok := b.topicRelevance.Get(message.Message.Topic); ok {
-		wsMsg := &protocol.WebSocketMessage{
-			MessageType: message.MessageType,
-			Data:        message.Message.Data,
-		}
 		for _, v := range m.Items() {
 			if v.isClose {
 				return ErrorClose
@@ -403,7 +399,7 @@ func (b *Bucket) push(message *protocol.FireInfo) error {
 				return nil
 			}
 
-			v.sendOut <- wsMsg
+			v.sendOut <- message
 		}
 		return nil
 	}
