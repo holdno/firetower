@@ -40,6 +40,7 @@ type Manager interface {
 	protocol.Pusher
 	GetTopics() (map[string]uint64, error)
 	ClusterID() int64
+	Store() stores
 }
 
 // TowerManager 包含中心处理队列和多个bucket
@@ -276,6 +277,10 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 	return tm, nil
 }
 
+func (t *TowerManager) Store() stores {
+	return t.stores
+}
+
 func (t *TowerManager) GetTopics() (map[string]uint64, error) {
 	return t.stores.ClusterTopicStore().ClusterTopics()
 }
@@ -334,10 +339,13 @@ func (b *Bucket) consumer() {
 			switch fire.Message.Type {
 			case protocol.OfflineTopicByUserIdKey:
 				// 需要退订的topic和user_id
+				// todo use api
 				b.unSubscribeByUserId(fire)
 			case protocol.OfflineTopicKey:
+				// todo use api
 				b.unSubscribeAll(fire)
 			case protocol.OfflineUserKey:
+				// todo use api
 				b.offlineUsers(fire)
 			default:
 				b.push(fire)
@@ -352,7 +360,7 @@ func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
 		m.Set(bt.ClientID(), bt)
 	} else {
 		inner := cmap.New[*FireTower]()
-		inner.Set(topic, bt)
+		inner.Set(bt.ClientID(), bt)
 		b.topicRelevance.Set(topic, inner)
 	}
 	tm.topicCounter <- counterMsg{
@@ -404,11 +412,9 @@ func (b *Bucket) push(message *protocol.FireInfo) error {
 
 // UnSubscribeByUserId 服务端指定某个用户退订某个topic
 func (b *Bucket) unSubscribeByUserId(fire *protocol.FireInfo) error {
-	b.mu.RLock()
-	if m, ok := b.topicRelevance[fire.Message.Topic]; ok {
-		b.mu.RUnlock()
+	if m, ok := b.topicRelevance.Get(fire.Message.Topic); ok {
 		userId := string(fire.Message.Data)
-		for _, v := range m {
+		for _, v := range m.Items() {
 			if v.UserID() == userId {
 				_, err := v.unbindTopic([]string{fire.Message.Topic})
 				if v.unSubscribeHandler != nil {
@@ -422,16 +428,14 @@ func (b *Bucket) unSubscribeByUserId(fire *protocol.FireInfo) error {
 		}
 		return nil
 	}
-	b.mu.RUnlock()
+
 	return ErrorTopicEmpty
 }
 
 // UnSubscribeAll 移除所有该topic的订阅关系
 func (b *Bucket) unSubscribeAll(fire *protocol.FireInfo) error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	if m, ok := b.topicRelevance[fire.Message.Topic]; ok {
-		for _, v := range m {
+	if m, ok := b.topicRelevance.Get(fire.Message.Topic); ok {
+		for _, v := range m.Items() {
 			_, err := v.unbindTopic([]string{fire.Message.Topic})
 			// 移除所有人的应该不需要执行回调方法
 			if v.onSystemRemove != nil {
@@ -446,11 +450,9 @@ func (b *Bucket) unSubscribeAll(fire *protocol.FireInfo) error {
 }
 
 func (b *Bucket) offlineUsers(fire *protocol.FireInfo) error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	if m, ok := b.topicRelevance[fire.Message.Topic]; ok {
+	if m, ok := b.topicRelevance.Get(fire.Message.Topic); ok {
 		userId := string(fire.Message.Data)
-		for _, v := range m {
+		for _, v := range m.Items() {
 			if v.UserID() == userId {
 				v.Close()
 				return nil

@@ -33,7 +33,7 @@ type FireTower struct {
 	readIn    chan *protocol.FireInfo         // 读取队列
 	sendOut   chan *protocol.WebSocketMessage // 发送队列
 	ws        *websocket.Conn                 // 保存底层websocket连接
-	topic     map[string]bool                 // 订阅topic列表
+	topic     sync.Map                        // 订阅topic列表
 	isClose   bool                            // 判断当前websocket是否被关闭
 	closeChan chan struct{}                   // 用来作为关闭websocket的触发点
 	mutex     sync.Mutex                      // 避免并发close chan
@@ -92,7 +92,7 @@ func buildNewTower(ws *websocket.Conn, clientID string) *FireTower {
 	t.startTime = time.Now()
 	t.readIn = make(chan *protocol.FireInfo, tm.cfg.ChanLens)
 	t.sendOut = make(chan *protocol.WebSocketMessage, tm.cfg.ChanLens)
-	t.topic = make(map[string]bool)
+	t.topic = sync.Map{}
 	t.ws = ws
 	t.isClose = false
 	t.closeChan = make(chan struct{})
@@ -136,9 +136,10 @@ func (t *FireTower) Run() {
 
 func (t *FireTower) TopicList() []string {
 	var topics []string
-	for k := range t.topic {
-		topics = append(topics, k)
-	}
+	t.topic.Range(func(key, value any) bool {
+		topics = append(topics, key.(string))
+		return true
+	})
 	return topics
 }
 
@@ -149,11 +150,15 @@ func (t *FireTower) bindTopic(topic []string) ([]string, error) {
 	)
 	bucket := tm.GetBucket(t)
 	for _, v := range topic {
-		if _, ok := t.topic[v]; !ok {
+		if _, loaded := t.topic.LoadOrStore(v, struct{}{}); !loaded {
 			addTopic = append(addTopic, v) // 待订阅的topic
-			t.topic[v] = true
 			bucket.AddSubscribe(v, t)
 		}
+		// if _, ok := t.topic[v]; !ok {
+		// 	addTopic = append(addTopic, v) // 待订阅的topic
+		// 	t.topic[v] = true
+		// 	bucket.AddSubscribe(v, t)
+		// }
 	}
 	return addTopic, nil
 }
@@ -162,12 +167,16 @@ func (t *FireTower) unbindTopic(topic []string) ([]string, error) {
 	var delTopic []string // 待取消订阅的topic列表
 	bucket := tm.GetBucket(t)
 	for _, v := range topic {
-		if _, ok := t.topic[v]; ok {
+		if _, loaded := t.topic.LoadAndDelete(v); loaded {
 			// 如果客户端已经订阅过该topic才执行退订
 			delTopic = append(delTopic, v)
-			delete(t.topic, v)
 			bucket.DelSubscribe(v, t)
 		}
+		// if _, ok := t.topic[v]; ok {
+		// 	delTopic = append(delTopic, v)
+		// 	delete(t.topic, v)
+		// 	bucket.DelSubscribe(v, t)
+		// }
 	}
 	return delTopic, nil
 }
@@ -187,11 +196,12 @@ func (t *FireTower) Close() {
 	defer t.mutex.Unlock()
 	if !t.isClose {
 		t.isClose = true
-		if t.topic != nil {
-			var topicSlice []string
-			for k := range t.topic {
-				topicSlice = append(topicSlice, k)
-			}
+		var topicSlice []string
+		t.topic.Range(func(key, value any) bool {
+			topicSlice = append(topicSlice, key.(string))
+			return true
+		})
+		if len(topicSlice) > 0 {
 			delTopic, err := t.unbindTopic(topicSlice)
 			if err != nil {
 				t.logger.Error("faied to unbind topic when tower closed")
@@ -204,6 +214,7 @@ func (t *FireTower) Close() {
 				}
 			}
 		}
+
 		t.ws.Close()
 		tm.connCounter <- counterMsg{
 			Key: tm.ip,

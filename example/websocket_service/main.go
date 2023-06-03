@@ -91,6 +91,7 @@ func main() {
 			tm.Publish(f)
 		}
 	}()
+
 	http.HandleFunc("/ws", Websocket)
 	fmt.Println("websocket service start: 0.0.0.0:9999")
 	http.ListenAndServe("0.0.0.0:9999", nil)
