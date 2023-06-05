@@ -331,13 +331,10 @@ func (t *FireTower) readLogic(fire *protocol.FireInfo) error {
 				return err
 			}
 		default:
-			if t.readHandler != nil {
-				ok := t.readHandler(fire)
-				if !ok {
-					return nil
-				}
-				t.Publish(fire)
+			if t.readHandler != nil && !t.readHandler(fire) {
+				return nil
 			}
+			t.Publish(fire)
 		}
 	}
 	return nil

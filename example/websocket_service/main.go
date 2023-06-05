@@ -63,13 +63,14 @@ func main() {
 		},
 		// Cluster: config.Cluster{
 		// 	RedisOption: config.Redis{
-		// 		Addr: "localhost:6379",
+		// 		Addr:     "localhost:6379",
+		// 		Password: "",
 		// 	},
 		// 	NatsOption: config.Nats{
 		// 		Addr:       "nats://localhost:4222",
-		// 		UserName:   "firetower",
-		// 		Password:   "firetower",
-		// 		ServerName: "firetower",
+		// 		UserName:   "root",
+		// 		Password:   "",
+		// 		ServerName: "",
 		// 	},
 		// },
 	})
@@ -93,8 +94,10 @@ func main() {
 	}()
 
 	http.HandleFunc("/ws", Websocket)
-	fmt.Println("websocket service start: 0.0.0.0:9999")
-	http.ListenAndServe("0.0.0.0:9999", nil)
+	tm.Logger().Info("http server start", zap.String("address", "0.0.0.0:9999"))
+	if err := http.ListenAndServe("0.0.0.0:9999", nil); err != nil {
+		panic(err)
+	}
 }
 
 // Websocket http转websocket连接 并实例化firetower
@@ -201,13 +204,6 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	})
 
 	tower.SetUnSubscribeHandler(func(context protocol.FireLife, topic []string) bool {
-		// for _, v := range topic {
-		// 	num := tower.GetConnectNum(v)
-		// 	var pushmsg = protocol.NewFireInfo(tower)
-		// 	pushmsg.Message.Topic = v
-		// 	pushmsg.Message.Data = []byte(fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num))
-		// 	tower.Publish(pushmsg)
-		// }
 		return true
 	})
 

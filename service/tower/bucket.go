@@ -41,6 +41,7 @@ type Manager interface {
 	GetTopics() (map[string]uint64, error)
 	ClusterID() int64
 	Store() stores
+	Logger() *zap.Logger
 }
 
 // TowerManager 包含中心处理队列和多个bucket
@@ -162,8 +163,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 			tm.Pusher = nats.MustSetupNatsPusher(cfg.Cluster.NatsOption, tm.coder, tm.logger, func() map[string]uint64 {
 				m, err := tm.stores.ClusterTopicStore().Topics()
 				if err != nil {
-					tm.logger.Error("failed to get current node topics", zap.Error(err))
-					//todo log
+					tm.logger.Error("failed to get current node topics from nats", zap.Error(err))
 					return map[string]uint64{}
 				}
 				return m
@@ -199,9 +199,10 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 
 	go func() {
 		var (
-			connCounter  int64
-			topicCounter = make(map[string]int64)
-			ticker       = time.NewTicker(time.Millisecond * 500)
+			connCounter      int64
+			topicCounter     = make(map[string]int64)
+			ticker           = time.NewTicker(time.Millisecond * 500)
+			clusterHeartbeat = time.NewTicker(time.Second * 3)
 		)
 
 		reportConn := func(counter int64) {
@@ -209,7 +210,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 				return tm.stores.ClusterConnStore().OneClientAtomicAddBy(tm.ip, counter)
 			}, rego.WithLatestError(), rego.WithPeriod(time.Second), rego.WithBackoffFector(1.5), rego.WithTimes(16))
 			if err != nil {
-				// todo log & warning
+				tm.logger.Error("failed to update the number of redis websocket connections", zap.Error(err))
 				tm.connCounter <- counterMsg{
 					Key: tm.ip,
 					Num: counter,
@@ -227,7 +228,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 					return tm.stores.ClusterTopicStore().TopicConnAtomicAddBy(t, n)
 				}, rego.WithLatestError(), rego.WithPeriod(time.Second), rego.WithBackoffFector(1.5), rego.WithTimes(10))
 				if err != nil {
-					// todo log & warning
+					tm.logger.Error("failed to update the number of connections for the topic in redis", zap.Error(err))
 					tm.topicCounter <- counterMsg{
 						Key: t,
 						Num: n,
@@ -249,11 +250,14 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 				if connCounter > 0 {
 					go reportConn(connCounter)
 					connCounter = 0
+					clusterHeartbeat.Reset(time.Second * 3)
 				}
 				if len(topicCounter) > 0 {
 					go reportTopicConn(topicCounter)
 					topicCounter = make(map[string]int64)
 				}
+			case <-clusterHeartbeat.C:
+				reportConn(0)
 			case <-tm.closeChan:
 				return
 			}
@@ -275,6 +279,10 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 	}()
 
 	return tm, nil
+}
+
+func (t *TowerManager) Logger() *zap.Logger {
+	return t.logger
 }
 
 func (t *TowerManager) Store() stores {
