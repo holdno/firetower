@@ -233,10 +233,10 @@ func (t *FireTower) sendLoop() {
 	for {
 		select {
 		case wsMsg := <-t.sendOut:
-			if wsMsg.MessageType == 0 {
-				wsMsg.MessageType = websocket.TextMessage // 文本格式
-			}
-			if err := t.ws.WriteMessage(wsMsg.MessageType, wsMsg.Message.Json()); err != nil {
+			// if wsMsg.MessageType == 0 {
+			// 	wsMsg.MessageType = websocket.TextMessage // 文本格式
+			// }
+			if err := t.ToSelf(wsMsg.Message.Json()); err != nil {
 				goto collapse
 			}
 		case <-heartTicker.C:
@@ -384,6 +384,8 @@ func (t *FireTower) Publish(fire *protocol.FireInfo) error {
 // 这里描述一下使用场景
 // 只针对当前客户端进行的推送请调用该方法
 func (t *FireTower) ToSelf(b []byte) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	if t.isClose != true {
 		return t.ws.WriteMessage(websocket.TextMessage, b)
 	}
