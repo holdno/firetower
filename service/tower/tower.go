@@ -25,7 +25,7 @@ type FireTower struct {
 	connID    uint64 // 连接id 每台服务器上该id从1开始自增
 	clientID  string // 客户端id 用来做业务逻辑
 	userID    string // 一般业务中每个连接都是一个用户 用来给业务提供用户识别
-	ext       sync.Map
+	ext       *sync.Map
 	Cookie    []byte // 这里提供给业务放一个存放跟当前连接相关的数据信息
 	startTime time.Time
 
@@ -61,7 +61,7 @@ func (t *FireTower) SetUserID(id string) {
 	t.userID = id
 }
 
-func (t *FireTower) Ext() sync.Map {
+func (t *FireTower) Ext() *sync.Map {
 	return t.ext
 }
 
@@ -90,6 +90,7 @@ func buildNewTower(ws *websocket.Conn, clientID string) *FireTower {
 	t.connID = getConnId()
 	t.clientID = clientID
 	t.startTime = time.Now()
+	t.ext = &sync.Map{}
 	t.readIn = make(chan *protocol.FireInfo, tm.cfg.ReadChanLens)
 	t.sendOut = make(chan *protocol.FireInfo, tm.cfg.WriteChanLens)
 	t.topic = sync.Map{}
@@ -119,6 +120,12 @@ func (t *FireTower) Run() {
 		Key: tm.ip,
 		Num: 1,
 	}
+
+	if t.ws == nil {
+		// server side
+		return
+	}
+
 	// 读取websocket信息
 	go t.readLoop()
 	// 处理读取事件
@@ -215,7 +222,10 @@ func (t *FireTower) Close() {
 			}
 		}
 
-		t.ws.Close()
+		if t.ws != nil {
+			t.ws.Close()
+		}
+
 		tm.connCounter <- counterMsg{
 			Key: tm.ip,
 			Num: -1,
@@ -254,6 +264,9 @@ collapse:
 }
 
 func (t *FireTower) readLoop() {
+	if t.ws == nil {
+		return
+	}
 	defer func() {
 		if err := recover(); err != nil {
 			tm.logger.Error("readloop panic", zap.Any("error", err))
@@ -384,6 +397,9 @@ func (t *FireTower) Publish(fire *protocol.FireInfo) error {
 // 这里描述一下使用场景
 // 只针对当前客户端进行的推送请调用该方法
 func (t *FireTower) ToSelf(b []byte) error {
+	if t.ws == nil {
+		return ErrorServerSideMode
+	}
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if t.isClose != true {
