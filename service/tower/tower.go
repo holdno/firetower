@@ -243,12 +243,15 @@ func (t *FireTower) sendLoop() {
 	for {
 		select {
 		case wsMsg := <-t.sendOut:
+			if t.ws != nil {
+				if err := t.ToSelf(wsMsg.Message.Json()); err != nil {
+					goto collapse
+				}
+			}
 			// if wsMsg.MessageType == 0 {
 			// 	wsMsg.MessageType = websocket.TextMessage // 文本格式
 			// }
-			if err := t.ToSelf(wsMsg.Message.Json()); err != nil {
-				goto collapse
-			}
+
 		case <-heartTicker.C:
 			// sendMessage.Data = []byte{104, 101, 97, 114, 116, 98, 101, 97, 116} // []byte("heartbeat")
 			if err := t.ToSelf([]byte{104, 101, 97, 114, 116, 98, 101, 97, 116}); err != nil {

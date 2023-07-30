@@ -407,7 +407,9 @@ func (b *Bucket) push(message *protocol.FireInfo) error {
 				return nil
 			}
 
-			v.sendOut <- message
+			if v.ws != nil {
+				v.sendOut <- message
+			}
 		}
 		return nil
 	}
