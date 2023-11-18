@@ -1,6 +1,7 @@
 package tower
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,6 +53,7 @@ type TowerManager struct {
 	centralChan chan *protocol.FireInfo // 中心处理队列
 	ip          string
 	clusterID   int64
+	timeout     time.Duration
 
 	stores       stores
 	logger       *zap.Logger
@@ -97,6 +99,7 @@ type Bucket struct {
 	// topicRelevance map[string]map[string]*FireTower // topic -> websocket clientid -> websocket conn
 	topicRelevance cmap.ConcurrentMap[string, cmap.ConcurrentMap[string, *FireTower]]
 	BuffChan       chan *protocol.FireInfo // bucket的消息处理队列
+	sendTimeout    time.Duration
 }
 
 type TowerOption func(t *TowerManager)
@@ -104,6 +107,14 @@ type TowerOption func(t *TowerManager)
 func BuildWithPusher(pusher protocol.Pusher) TowerOption {
 	return func(t *TowerManager) {
 		t.Pusher = pusher
+	}
+}
+
+func BuildWithMessageDisposeTimeout(timeout time.Duration) TowerOption {
+	return func(t *TowerManager) {
+		if timeout > 0 {
+			t.timeout = timeout
+		}
 	}
 }
 
@@ -141,6 +152,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 		closeChan:    make(chan struct{}),
 		brazier:      &brazier{},
 		logger:       log.New(log.Config{Level: zap.DebugLevel}),
+		timeout:      time.Second,
 	}
 
 	for _, opt := range opts {
@@ -194,7 +206,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 	utils.SetupIDWorker(tm.clusterID)
 
 	for i := range tm.bucket {
-		tm.bucket[i] = newBucket(cfg.Bucket.BuffChanCount, cfg.Bucket.ConsumerNum)
+		tm.bucket[i] = newBucket(cfg.Bucket.BuffChanCount, cfg.Bucket.ConsumerNum, tm.timeout)
 	}
 
 	go func() {
@@ -300,12 +312,13 @@ func (t *TowerManager) ClusterID() int64 {
 	return tm.clusterID
 }
 
-func newBucket(buff int64, consumerNum int) *Bucket {
+func newBucket(buff int64, consumerNum int, timeout time.Duration) *Bucket {
 	b := &Bucket{
 		id:             getNewBucketId(),
 		len:            0,
 		topicRelevance: cmap.New[cmap.ConcurrentMap[string, *FireTower]](),
 		BuffChan:       make(chan *protocol.FireInfo, buff),
+		sendTimeout:    timeout,
 	}
 
 	if consumerNum == 0 {
@@ -344,20 +357,23 @@ func (b *Bucket) consumer() {
 	for {
 		select {
 		case fire := <-b.BuffChan:
-			switch fire.Message.Type {
-			case protocol.OfflineTopicByUserIdKey:
-				// 需要退订的topic和user_id
-				// todo use api
-				b.unSubscribeByUserId(fire)
-			case protocol.OfflineTopicKey:
-				// todo use api
-				b.unSubscribeAll(fire)
-			case protocol.OfflineUserKey:
-				// todo use api
-				b.offlineUsers(fire)
-			default:
-				b.push(fire)
-			}
+			func() {
+				defer tm.brazier.Extinguished(fire)
+				switch fire.Message.Type {
+				case protocol.OfflineTopicByUserIdOperation:
+					// 需要退订的topic和user_id
+					// todo use api
+					b.unSubscribeByUserId(fire)
+				case protocol.OfflineTopicOperation:
+					// todo use api
+					b.unSubscribeAll(fire)
+				case protocol.OfflineUserOperation:
+					// todo use api
+					b.offlineUsers(fire)
+				default:
+					b.push(fire)
+				}
+			}()
 		}
 	}
 }
@@ -408,7 +424,17 @@ func (b *Bucket) push(message *protocol.FireInfo) error {
 			}
 
 			if v.ws != nil {
-				v.sendOut <- message
+				func() {
+					ctx, cancel := context.WithTimeout(context.Background(), b.sendTimeout)
+					defer cancel()
+					select {
+					case v.sendOut <- message.Message.Json():
+					case <-ctx.Done():
+						if v.sendTimeoutHandler != nil {
+							v.sendTimeoutHandler(message)
+						}
+					}
+				}()
 			}
 		}
 		return nil
@@ -422,12 +448,9 @@ func (b *Bucket) unSubscribeByUserId(fire *protocol.FireInfo) error {
 		userId := string(fire.Message.Data)
 		for _, v := range m.Items() {
 			if v.UserID() == userId {
-				_, err := v.unbindTopic([]string{fire.Message.Topic})
+				v.unbindTopic([]string{fire.Message.Topic})
 				if v.unSubscribeHandler != nil {
 					v.unSubscribeHandler(fire.Context, []string{fire.Message.Topic})
-				}
-				if err != nil {
-					return err
 				}
 				return nil
 			}
@@ -442,15 +465,13 @@ func (b *Bucket) unSubscribeByUserId(fire *protocol.FireInfo) error {
 func (b *Bucket) unSubscribeAll(fire *protocol.FireInfo) error {
 	if m, ok := b.topicRelevance.Get(fire.Message.Topic); ok {
 		for _, v := range m.Items() {
-			_, err := v.unbindTopic([]string{fire.Message.Topic})
+			v.unbindTopic([]string{fire.Message.Topic})
 			// 移除所有人的应该不需要执行回调方法
 			if v.onSystemRemove != nil {
 				v.onSystemRemove(fire.Message.Topic)
 			}
-			if err != nil {
-				return err
-			}
 		}
+		return nil
 	}
 	return ErrorTopicEmpty
 }

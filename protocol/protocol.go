@@ -48,7 +48,7 @@ func (f *FireInfo) Copy() FireInfo {
 type TopicMessage struct {
 	Topic string          `json:"topic"`
 	Data  json.RawMessage `json:"data"` // 可能是个json
-	Type  string          `json:"type"`
+	Type  FireOperation   `json:"type"`
 }
 
 func (s *TopicMessage) Json() []byte {

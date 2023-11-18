@@ -16,7 +16,7 @@ func (b *brazier) Extinguished(fire *protocol.FireInfo) {
 	fire.MessageType = 0
 	fire.Message.Data = []byte("")
 	fire.Message.Topic = ""
-	fire.Message.Type = ""
+	fire.Message.Type = 0
 	firePool.Put(fire)
 }
 
@@ -32,7 +32,7 @@ type PusherInfo interface {
 
 func NewFire(source protocol.FireSource, tower PusherInfo) *protocol.FireInfo {
 	f := tm.brazier.LightAFire()
-	f.Message.Type = protocol.PublishKey
+	f.Message.Type = protocol.PublishOperation
 	f.Context.Reset(source, tower.ClientID(), tower.UserID())
 	return f
 }

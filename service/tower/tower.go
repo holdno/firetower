@@ -1,6 +1,7 @@
 package tower
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -30,8 +31,9 @@ type FireTower struct {
 	startTime time.Time
 
 	logger    *zap.Logger
+	timeout   time.Duration
 	readIn    chan *protocol.FireInfo // 读取队列
-	sendOut   chan *protocol.FireInfo // 发送队列
+	sendOut   chan []byte             // 发送队列
 	ws        *websocket.Conn         // 保存底层websocket连接
 	topic     sync.Map                // 订阅topic列表
 	isClose   bool                    // 判断当前websocket是否被关闭
@@ -43,6 +45,7 @@ type FireTower struct {
 	receivedHandler        func(*protocol.FireInfo) bool
 	readHandler            func(*protocol.FireInfo) bool
 	readTimeoutHandler     func(*protocol.FireInfo)
+	sendTimeoutHandler     func(*protocol.FireInfo)
 	subscribeHandler       func(context protocol.FireLife, topic []string) bool
 	unSubscribeHandler     func(context protocol.FireLife, topic []string) bool
 	beforeSubscribeHandler func(context protocol.FireLife, topic []string) bool
@@ -92,7 +95,7 @@ func buildNewTower(ws *websocket.Conn, clientID string) *FireTower {
 	t.startTime = time.Now()
 	t.ext = &sync.Map{}
 	t.readIn = make(chan *protocol.FireInfo, tm.cfg.ReadChanLens)
-	t.sendOut = make(chan *protocol.FireInfo, tm.cfg.WriteChanLens)
+	t.sendOut = make(chan []byte, tm.cfg.WriteChanLens)
 	t.topic = sync.Map{}
 	t.ws = ws
 	t.isClose = false
@@ -100,6 +103,7 @@ func buildNewTower(ws *websocket.Conn, clientID string) *FireTower {
 
 	t.readHandler = nil
 	t.readTimeoutHandler = nil
+	t.sendTimeoutHandler = nil
 	t.subscribeHandler = nil
 	t.unSubscribeHandler = nil
 	t.beforeSubscribeHandler = nil
@@ -170,7 +174,7 @@ func (t *FireTower) bindTopic(topic []string) ([]string, error) {
 	return addTopic, nil
 }
 
-func (t *FireTower) unbindTopic(topic []string) ([]string, error) {
+func (t *FireTower) unbindTopic(topic []string) []string {
 	var delTopic []string // 待取消订阅的topic列表
 	bucket := tm.GetBucket(t)
 	for _, v := range topic {
@@ -179,13 +183,8 @@ func (t *FireTower) unbindTopic(topic []string) ([]string, error) {
 			delTopic = append(delTopic, v)
 			bucket.DelSubscribe(v, t)
 		}
-		// if _, ok := t.topic[v]; ok {
-		// 	delTopic = append(delTopic, v)
-		// 	delete(t.topic, v)
-		// 	bucket.DelSubscribe(v, t)
-		// }
 	}
-	return delTopic, nil
+	return delTopic
 }
 
 func (t *FireTower) read() (*protocol.FireInfo, error) {
@@ -209,16 +208,13 @@ func (t *FireTower) Close() {
 			return true
 		})
 		if len(topicSlice) > 0 {
-			delTopic, err := t.unbindTopic(topicSlice)
-			if err != nil {
-				t.logger.Error("faied to unbind topic when tower closed")
-			} else {
-				fire := NewFire(protocol.SourceSystem, t)
-				defer tm.brazier.Extinguished(fire)
+			delTopic := t.unbindTopic(topicSlice)
 
-				if t.unSubscribeHandler != nil {
-					t.unSubscribeHandler(fire.Context, delTopic)
-				}
+			fire := NewFire(protocol.SourceSystem, t)
+			defer tm.brazier.Extinguished(fire)
+
+			if t.unSubscribeHandler != nil {
+				t.unSubscribeHandler(fire.Context, delTopic)
 			}
 		}
 
@@ -238,23 +234,21 @@ func (t *FireTower) Close() {
 	}
 }
 
+var heartbeat = []byte{104, 101, 97, 114, 116, 98, 101, 97, 116}
+
 func (t *FireTower) sendLoop() {
 	heartTicker := time.NewTicker(time.Duration(tm.cfg.Heartbeat) * time.Second)
 	for {
 		select {
 		case wsMsg := <-t.sendOut:
 			if t.ws != nil {
-				if err := t.ToSelf(wsMsg.Message.Json()); err != nil {
+				if err := t.ToSelf(wsMsg); err != nil {
 					goto collapse
 				}
 			}
-			// if wsMsg.MessageType == 0 {
-			// 	wsMsg.MessageType = websocket.TextMessage // 文本格式
-			// }
-
 		case <-heartTicker.C:
 			// sendMessage.Data = []byte{104, 101, 97, 114, 116, 98, 101, 97, 116} // []byte("heartbeat")
-			if err := t.ToSelf([]byte{104, 101, 97, 114, 116, 98, 101, 97, 116}); err != nil {
+			if err := t.ToSelf(heartbeat); err != nil {
 				goto collapse
 			}
 		case <-t.closeChan:
@@ -287,19 +281,22 @@ func (t *FireTower) readLoop() {
 			continue
 		}
 
-		timeout := time.After(time.Duration(3) * time.Second)
-		select {
-		case t.readIn <- fire:
-		case <-timeout:
-			if t.readTimeoutHandler != nil {
-				t.readTimeoutHandler(fire)
+		func() {
+			ctx, cancel := context.WithTimeout(context.Background(), t.timeout)
+			defer cancel()
+			select {
+			case t.readIn <- fire:
+				return
+			case <-ctx.Done():
+				if t.readTimeoutHandler != nil {
+					t.readTimeoutHandler(fire)
+				}
+				t.logger.Error("readloop timeout", zap.Any("data", data))
+			case <-t.closeChan:
 			}
-			t.logger.Error("readloop timeout", zap.Any("data", data))
 			tm.brazier.Extinguished(fire)
-		case <-t.closeChan:
-			tm.brazier.Extinguished(fire)
-			return
-		}
+		}()
+
 	}
 collapse:
 	t.Close()
@@ -315,7 +312,7 @@ func (t *FireTower) readDispose() {
 			t.Close()
 			return
 		}
-		t.readLogic(fire)
+		go t.readLogic(fire)
 	}
 }
 
@@ -329,7 +326,7 @@ func (t *FireTower) readLogic(fire *protocol.FireInfo) error {
 			return fmt.Errorf("%s:topic is empty, ClintId:%s, UserId:%s", fire.Message.Type, t.ClientID(), t.UserID())
 		}
 		switch fire.Message.Type {
-		case "subscribe": // 客户端订阅topic
+		case protocol.SubscribeOperation: // 客户端订阅topic
 			addTopics := strings.Split(fire.Message.Topic, ",")
 			// 增加messageId 方便追踪
 			err := t.Subscribe(fire.Context, addTopics)
@@ -338,7 +335,7 @@ func (t *FireTower) readLogic(fire *protocol.FireInfo) error {
 				// TODO metrics
 				return err
 			}
-		case "unSubscribe": // 客户端取消订阅topic
+		case protocol.UnSubscribeOperation: // 客户端取消订阅topic
 			delTopic := strings.Split(fire.Message.Topic, ",")
 			err := t.UnSubscribe(fire.Context, delTopic)
 			if err != nil {
@@ -375,10 +372,8 @@ func (t *FireTower) Subscribe(context protocol.FireLife, topics []string) error 
 }
 
 func (t *FireTower) UnSubscribe(context protocol.FireLife, topics []string) error {
-	delTopics, err := t.unbindTopic(topics)
-	if err != nil {
-		return err
-	}
+	delTopics := t.unbindTopic(topics)
+
 	if t.unSubscribeHandler != nil {
 		t.unSubscribeHandler(context, delTopics)
 	}
@@ -453,6 +448,10 @@ func (t *FireTower) SetBeforeSubscribeHandler(fn func(context protocol.FireLife,
 // readIn channal写满了  生产 > 消费的情况下触发超时机制
 func (t *FireTower) SetReadTimeoutHandler(fn func(*protocol.FireInfo)) {
 	t.readTimeoutHandler = fn
+}
+
+func (t *FireTower) SetSendTimeoutHandler(fn func(*protocol.FireInfo)) {
+	t.sendTimeoutHandler = fn
 }
 
 // SetOnSystemRemove 系统移除某个用户的topic订阅

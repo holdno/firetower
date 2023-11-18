@@ -4,9 +4,10 @@ function firetower(addr, onopen) {
 
 	var _this = this
 
-	this.subscribeKey = 'subscribe'
-	this.unSubscribeKey = 'unSubscribe'
-	this.publishKey = 'publish'
+	this.publishKey = 1
+	this.subscribeKey = 2
+	this.unSubscribeKey = 3
+	
 	this.logopen = true // 开启log
 
 	var logInfo = function(data){
