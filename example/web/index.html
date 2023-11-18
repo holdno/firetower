@@ -290,18 +290,6 @@ input, button {
         dom.scrollTop = dom.scrollHeight
     }
 
-	window.addEventListener("load", function () {
-		// 首先，让我们检查我们是否有权限发出通知
-		// 如果没有，我们就请求获得权限
-		if (window.Notification && Notification.permission !== "granted") {
-			Notification.requestPermission(function (status) {
-				if (Notification.permission !== status) {
-					Notification.permission = status;
-				}
-			});
-		}
-	})
-
 	function RndNum(n){
 	    var rnd="";
 	    for(var i=0;i<n;i++)
@@ -328,13 +316,8 @@ input, button {
 
 	printMsg('system', "连接中...")
 
-	function Notify(msg) {
-		if (window.Notification && Notification.permission === "granted") {
-			new Notification(msg);
-		}
-	}
-
-	var bt = new firetower("wss://firetower-whq5f2f.zeno.run/ws", function(){
+	// wss://firetower-whq5f2f.zeno.run/ws
+	var bt = new firetower("ws://127.0.0.1:9999/ws", function(){
 		console.log('建立连接')
 		bt.subscribe([subscribe])
 		printMsg('system', "连接成功。欢迎进入基于firetower构建的聊天室，您可以在底部输入框输入内容并发送，当前在线的用户可以接收到该信息。")
@@ -343,21 +326,21 @@ input, button {
 
 	bt.onmessage = function(res){
 		var msg = JSON.parse(res.data)
-		console.log(msg)
+		console.log('onmessage',msg)
 		switch (msg.type) {
 			case 'onSubscribe' || 'onUnsubscribe':
 			// 更新在线人数
 				document.getElementById('connected').innerHTML = msg.data
 				break;
 			case 'publish':
-				printMsg(msg.from, msg.data)
-				Notify('您有新的消息，请及时查看。')
+				printMsg(msg.data.from, msg.data.data)
 				break;
 			case 'timeout':
 				printMsg(msg.from, msg.data+` <font color="#f00" class='point' onclick="bt.publish(subscribe, {from: user, data: '`+msg.data+`', type: 'publish'})">发送失败(超时):点击重试</font>`)
 				break;
 			case 'event':
 				const e = msg.data
+				console.log('onevent', msg.data)
 				if (!e.type) {
 					return
 				}

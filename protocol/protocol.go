@@ -1,9 +1,10 @@
 package protocol
 
 import (
-	"encoding/json"
 	"strconv"
 	"time"
+
+	json "github.com/json-iterator/go"
 
 	"github.com/holdno/firetower/utils"
 )
@@ -27,13 +28,9 @@ type Coder interface {
 	Encode(msg *FireInfo) []byte
 }
 
-var (
-	// FireLogger 接管链接log t log类型 info log信息
-	FireLogger func(f *FireInfo, types, info string)
-)
-
-func init() {
-	FireLogger = fireLog
+type WebSocketMessage struct {
+	MessageType int
+	Data        []byte
 }
 
 // FireInfo 接收的消息结构体
@@ -43,6 +40,10 @@ type FireInfo struct {
 	Message     TopicMessage `json:"m"`
 }
 
+func (f *FireInfo) Copy() FireInfo {
+	return *f
+}
+
 // TopicMessage 话题信息结构体
 type TopicMessage struct {
 	Topic string          `json:"topic"`
@@ -50,24 +51,14 @@ type TopicMessage struct {
 	Type  string          `json:"type"`
 }
 
+func (s *TopicMessage) Json() []byte {
+	raw, _ := json.Marshal(s)
+	return raw
+}
+
 type TowerInfo interface {
 	UserID() string
 	ClientID() string
-}
-
-// Panic 消息的panic日志 并回收变量
-func (f *FireInfo) Panic(info string) {
-	FireLogger(f, "Panic", info)
-}
-
-// Info 记录一个INFO级别的日志
-func (f *FireInfo) Info(info string) {
-	FireLogger(f, "INFO", info)
-}
-
-// Error 记录一个ERROR级别的日志
-func (f *FireInfo) Error(info string) {
-	FireLogger(f, "ERROR", info)
 }
 
 // FireLife 客户端推送消息的结构体
@@ -86,18 +77,4 @@ func (f *FireLife) Reset(source FireSource, clientID, userID string) {
 	f.ClientID = clientID
 	f.UserID = userID
 	f.Source = source
-}
-
-func RecycleIn(fire *FireInfo, where string) {
-	if fire.Context.ExtMeta == nil {
-		fire.Context.ExtMeta = make(map[string]string)
-	}
-	fire.Context.ExtMeta["fire_recycle"] = where
-}
-
-func IsRecycleIn(fire *FireInfo, where string) bool {
-	if fire.Context.ExtMeta == nil {
-		return where == ""
-	}
-	return fire.Context.ExtMeta["fire_recycle"] == where
 }

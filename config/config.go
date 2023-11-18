@@ -8,11 +8,12 @@ import (
 
 // FireTowerConfig 每个连接的配置信息
 type FireTowerConfig struct {
-	ChanLens    int
-	Heartbeat   int
-	ServiceMode string
-	Bucket      BucketConfig
-	Cluster     Cluster
+	ReadChanLens  int
+	WriteChanLens int
+	Heartbeat     int
+	ServiceMode   string
+	Bucket        BucketConfig
+	Cluster       Cluster
 }
 
 type Cluster struct {

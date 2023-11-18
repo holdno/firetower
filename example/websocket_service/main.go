@@ -16,6 +16,7 @@ import (
 	"github.com/holdno/firetower/utils"
 	"github.com/holdno/snowFlakeByGo"
 	json "github.com/json-iterator/go"
+	"go.uber.org/zap"
 )
 
 var upgrader = websocket.Upgrader{
@@ -51,9 +52,9 @@ var systemer *SystemPusher
 func main() {
 	// 全局唯一id生成器
 	tm, err := towersvc.Setup(config.FireTowerConfig{
-		ChanLens:    1000,
-		Heartbeat:   30,
-		ServiceMode: config.SingleMode,
+		WriteChanLens: 1000,
+		Heartbeat:     30,
+		ServiceMode:   config.SingleMode,
 		Bucket: config.BucketConfig{
 			Num:              4,
 			CentralChanCount: 100000,
@@ -62,13 +63,14 @@ func main() {
 		},
 		// Cluster: config.Cluster{
 		// 	RedisOption: config.Redis{
-		// 		Addr: "localhost:6379",
+		// 		Addr:     "localhost:6379",
+		// 		Password: "",
 		// 	},
 		// 	NatsOption: config.Nats{
 		// 		Addr:       "nats://localhost:4222",
-		// 		UserName:   "firetower",
-		// 		Password:   "firetower",
-		// 		ServerName: "firetower",
+		// 		UserName:   "root",
+		// 		Password:   "",
+		// 		ServerName: "",
 		// 	},
 		// },
 	})
@@ -90,9 +92,12 @@ func main() {
 			tm.Publish(f)
 		}
 	}()
+
 	http.HandleFunc("/ws", Websocket)
-	fmt.Println("websocket service start: 0.0.0.0:9999")
-	http.ListenAndServe("0.0.0.0:9999", nil)
+	tm.Logger().Info("http server start", zap.String("address", "0.0.0.0:9999"))
+	if err := http.ListenAndServe("0.0.0.0:9999", nil); err != nil {
+		panic(err)
+	}
 }
 
 // Websocket http转websocket连接 并实例化firetower
@@ -103,7 +108,12 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	ws, _ := upgrader.Upgrade(w, r, nil)
 
 	id := utils.IDWorker().GetId()
-	tower := towersvc.BuildTower(ws, strconv.FormatInt(id, 10))
+	tower, err := towersvc.BuildTower(ws, strconv.FormatInt(id, 10))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
 
 	tower.SetReadHandler(func(fire *protocol.FireInfo) bool {
 		// fire将会在handler执行结束后被回收
@@ -121,7 +131,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 			messageInfo.Type = "event"
 			fire.Message.Data, _ = json.Marshal(messageInfo)
 			tower.ToSelf(fire.Message.Data)
-			return true
+			return false
 		case strings.HasPrefix(msg, "/room "):
 			if err = tower.UnSubscribe(fire.Context, tower.TopicList()); err != nil {
 				messageInfo.From = "system"
@@ -129,7 +139,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 				messageInfo.Data = []byte(fmt.Sprintf(`{"type": "error", "msg": "切换房间失败, %s"}`, err.Error()))
 				fire.Message.Data, _ = json.Marshal(messageInfo)
 				tower.ToSelf(fire.Message.Data)
-				return true
+				return false
 			}
 			roomCode := strings.TrimLeft(msg, "/room ")
 			if err = tower.Subscribe(fire.Context, []string{"/chat/" + roomCode}); err != nil {
@@ -138,10 +148,10 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 				messageInfo.Data = []byte(fmt.Sprintf(`{"type": "error", "msg": "切换房间失败, %s, 请重新尝试"}`, err.Error()))
 				fire.Message.Data, _ = json.Marshal(messageInfo)
 				tower.ToSelf(fire.Message.Data)
-				return true
+				return false
 			}
 
-			return true
+			return false
 		}
 
 		if tower.UserID() == "" {
@@ -151,7 +161,6 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		fire.Message.Data, _ = json.Marshal(messageInfo)
 		// 做发送验证
 		// 判断发送方是否有权限向到达方发送内容
-		tower.Publish(fire)
 		return true
 	})
 
@@ -195,13 +204,6 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	})
 
 	tower.SetUnSubscribeHandler(func(context protocol.FireLife, topic []string) bool {
-		// for _, v := range topic {
-		// 	num := tower.GetConnectNum(v)
-		// 	var pushmsg = protocol.NewFireInfo(tower)
-		// 	pushmsg.Message.Topic = v
-		// 	pushmsg.Message.Data = []byte(fmt.Sprintf("{\"type\":\"onUnsubscribe\",\"data\":%d}", num))
-		// 	tower.Publish(pushmsg)
-		// }
 		return true
 	})
 
@@ -214,7 +216,11 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 				return
 			case <-ticker.C:
 				for _, v := range tower.TopicList() {
-					num := tower.GetConnectNum(v)
+					num, err := tower.GetConnectNum(v)
+					if err != nil {
+						tower.Logger().Error("failed to get connect number", zap.Error(err))
+						continue
+					}
 					if topicConnCache[v] == num {
 						continue
 					}

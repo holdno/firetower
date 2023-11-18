@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/holdno/firetower/config"
+	"github.com/holdno/firetower/pkg/log"
 	"github.com/holdno/firetower/pkg/nats"
 	"github.com/holdno/firetower/protocol"
 	"github.com/holdno/firetower/store"
@@ -14,6 +15,8 @@ import (
 	"github.com/holdno/firetower/utils"
 
 	"github.com/holdno/rego"
+	cmap "github.com/orcaman/concurrent-map/v2"
+	"go.uber.org/zap"
 )
 
 var (
@@ -37,6 +40,8 @@ type Manager interface {
 	protocol.Pusher
 	GetTopics() (map[string]uint64, error)
 	ClusterID() int64
+	Store() stores
+	Logger() *zap.Logger
 }
 
 // TowerManager 包含中心处理队列和多个bucket
@@ -48,8 +53,8 @@ type TowerManager struct {
 	ip          string
 	clusterID   int64
 
-	stores stores
-
+	stores       stores
+	logger       *zap.Logger
 	topicCounter chan counterMsg
 	connCounter  chan counterMsg
 
@@ -86,11 +91,12 @@ type stores interface {
 
 // Bucket 的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
 type Bucket struct {
-	mu             sync.RWMutex // 读写锁，可并发读不可并发读写
-	id             int64
-	len            int64
-	topicRelevance map[string]map[string]*FireTower // topic -> websocket clientid -> websocket conn
-	BuffChan       chan *protocol.FireInfo          // bucket的消息处理队列
+	mu  sync.RWMutex // 读写锁，可并发读不可并发读写
+	id  int64
+	len int64
+	// topicRelevance map[string]map[string]*FireTower // topic -> websocket clientid -> websocket conn
+	topicRelevance cmap.ConcurrentMap[string, cmap.ConcurrentMap[string, *FireTower]]
+	BuffChan       chan *protocol.FireInfo // bucket的消息处理队列
 }
 
 type TowerOption func(t *TowerManager)
@@ -119,6 +125,12 @@ func BuildWithClusterID(id int64) TowerOption {
 	}
 }
 
+func BuildWithLogger(logger *zap.Logger) TowerOption {
+	return func(t *TowerManager) {
+		t.logger = logger
+	}
+}
+
 func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, error) {
 	tm = &TowerManager{
 		cfg:          cfg,
@@ -128,6 +140,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 		connCounter:  make(chan counterMsg, 200000),
 		closeChan:    make(chan struct{}),
 		brazier:      &brazier{},
+		logger:       log.New(log.Config{Level: zap.DebugLevel}),
 	}
 
 	for _, opt := range opts {
@@ -145,12 +158,12 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 
 	if tm.Pusher == nil {
 		if cfg.ServiceMode == config.SingleMode {
-			tm.Pusher = protocol.DefaultPusher(tm.brazier, tm.coder)
+			tm.Pusher = protocol.DefaultPusher(tm.brazier, tm.coder, tm.logger)
 		} else {
-			tm.Pusher = nats.MustSetupNatsPusher(cfg.Cluster.NatsOption, tm.brazier, tm.coder, func() map[string]uint64 {
+			tm.Pusher = nats.MustSetupNatsPusher(cfg.Cluster.NatsOption, tm.coder, tm.logger, func() map[string]uint64 {
 				m, err := tm.stores.ClusterTopicStore().Topics()
 				if err != nil {
-					//todo log
+					tm.logger.Error("failed to get current node topics from nats", zap.Error(err))
 					return map[string]uint64{}
 				}
 				return m
@@ -186,9 +199,10 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 
 	go func() {
 		var (
-			connCounter  int64
-			topicCounter = make(map[string]int64)
-			ticker       = time.NewTicker(time.Millisecond * 500)
+			connCounter      int64
+			topicCounter     = make(map[string]int64)
+			ticker           = time.NewTicker(time.Millisecond * 500)
+			clusterHeartbeat = time.NewTicker(time.Second * 3)
 		)
 
 		reportConn := func(counter int64) {
@@ -196,7 +210,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 				return tm.stores.ClusterConnStore().OneClientAtomicAddBy(tm.ip, counter)
 			}, rego.WithLatestError(), rego.WithPeriod(time.Second), rego.WithBackoffFector(1.5), rego.WithTimes(16))
 			if err != nil {
-				// todo log & warning
+				tm.logger.Error("failed to update the number of redis websocket connections", zap.Error(err))
 				tm.connCounter <- counterMsg{
 					Key: tm.ip,
 					Num: counter,
@@ -214,7 +228,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 					return tm.stores.ClusterTopicStore().TopicConnAtomicAddBy(t, n)
 				}, rego.WithLatestError(), rego.WithPeriod(time.Second), rego.WithBackoffFector(1.5), rego.WithTimes(10))
 				if err != nil {
-					// todo log & warning
+					tm.logger.Error("failed to update the number of connections for the topic in redis", zap.Error(err))
 					tm.topicCounter <- counterMsg{
 						Key: t,
 						Num: n,
@@ -236,11 +250,14 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 				if connCounter > 0 {
 					go reportConn(connCounter)
 					connCounter = 0
+					clusterHeartbeat.Reset(time.Second * 3)
 				}
 				if len(topicCounter) > 0 {
 					go reportTopicConn(topicCounter)
 					topicCounter = make(map[string]int64)
 				}
+			case <-clusterHeartbeat.C:
+				reportConn(0)
 			case <-tm.closeChan:
 				return
 			}
@@ -255,7 +272,6 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 				for i := range tm.bucket {
 					tm.bucket[i].BuffChan <- fire
 				}
-				fire.Info("Sended")
 			case <-tm.closeChan:
 				return
 			}
@@ -263,6 +279,14 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 	}()
 
 	return tm, nil
+}
+
+func (t *TowerManager) Logger() *zap.Logger {
+	return t.logger
+}
+
+func (t *TowerManager) Store() stores {
+	return t.stores
 }
 
 func (t *TowerManager) GetTopics() (map[string]uint64, error) {
@@ -280,7 +304,7 @@ func newBucket(buff int64, consumerNum int) *Bucket {
 	b := &Bucket{
 		id:             getNewBucketId(),
 		len:            0,
-		topicRelevance: make(map[string]map[string]*FireTower),
+		topicRelevance: cmap.New[cmap.ConcurrentMap[string, *FireTower]](),
 		BuffChan:       make(chan *protocol.FireInfo, buff),
 	}
 
@@ -321,15 +345,18 @@ func (b *Bucket) consumer() {
 		select {
 		case fire := <-b.BuffChan:
 			switch fire.Message.Type {
-			case protocol.PublishKey:
-				b.push(fire)
 			case protocol.OfflineTopicByUserIdKey:
 				// 需要退订的topic和user_id
+				// todo use api
 				b.unSubscribeByUserId(fire)
 			case protocol.OfflineTopicKey:
+				// todo use api
 				b.unSubscribeAll(fire)
 			case protocol.OfflineUserKey:
+				// todo use api
 				b.offlineUsers(fire)
+			default:
+				b.push(fire)
 			}
 		}
 	}
@@ -337,14 +364,13 @@ func (b *Bucket) consumer() {
 
 // AddSubscribe 添加当前实例中的topic->conn的订阅关系
 func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
-	b.mu.Lock()
-	if m, ok := b.topicRelevance[topic]; ok {
-		m[bt.ClientID()] = bt
+	if m, ok := b.topicRelevance.Get(topic); ok {
+		m.Set(bt.ClientID(), bt)
 	} else {
-		b.topicRelevance[topic] = make(map[string]*FireTower)
-		b.topicRelevance[topic][bt.ClientID()] = bt
+		inner := cmap.New[*FireTower]()
+		inner.Set(bt.ClientID(), bt)
+		b.topicRelevance.Set(topic, inner)
 	}
-	b.mu.Unlock()
 	tm.topicCounter <- counterMsg{
 		Key: topic,
 		Num: 1,
@@ -353,14 +379,13 @@ func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
 
 // DelSubscribe 删除当前实例中的topic->conn的订阅关系
 func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
-	b.mu.Lock()
-	if m, ok := b.topicRelevance[topic]; ok {
-		delete(m, bt.ClientID())
-		if len(m) == 0 {
-			delete(b.topicRelevance, topic)
+	if inner, ok := b.topicRelevance.Get(topic); ok {
+		inner.Remove(bt.clientID)
+		if inner.IsEmpty() {
+			b.topicRelevance.Remove(topic)
 		}
 	}
-	b.mu.Unlock()
+
 	tm.topicCounter <- counterMsg{
 		Key: topic,
 		Num: -1,
@@ -372,11 +397,19 @@ func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 // 在推送时每个bucket同时调用Push方法 来达到并发推送
 // 该方法主要通过遍历桶中的topic->conn订阅关系来进行websocket写入
 func (b *Bucket) push(message *protocol.FireInfo) error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	if m, ok := b.topicRelevance[message.Message.Topic]; ok {
-		for _, v := range m {
-			v.Send(message)
+	if m, ok := b.topicRelevance.Get(message.Message.Topic); ok {
+		for _, v := range m.Items() {
+			if v.isClose {
+				return ErrorClose
+			}
+
+			if v.receivedHandler != nil && !v.receivedHandler(message) {
+				return nil
+			}
+
+			if v.ws != nil {
+				v.sendOut <- message
+			}
 		}
 		return nil
 	}
@@ -385,15 +418,11 @@ func (b *Bucket) push(message *protocol.FireInfo) error {
 
 // UnSubscribeByUserId 服务端指定某个用户退订某个topic
 func (b *Bucket) unSubscribeByUserId(fire *protocol.FireInfo) error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	if m, ok := b.topicRelevance[fire.Message.Topic]; ok {
+	if m, ok := b.topicRelevance.Get(fire.Message.Topic); ok {
 		userId := string(fire.Message.Data)
-		for _, v := range m {
+		for _, v := range m.Items() {
 			if v.UserID() == userId {
 				_, err := v.unbindTopic([]string{fire.Message.Topic})
-				fire := NewFire(protocol.SourceSystem, v)
-				defer tm.brazier.Extinguished(fire)
 				if v.unSubscribeHandler != nil {
 					v.unSubscribeHandler(fire.Context, []string{fire.Message.Topic})
 				}
@@ -403,16 +432,16 @@ func (b *Bucket) unSubscribeByUserId(fire *protocol.FireInfo) error {
 				return nil
 			}
 		}
+		return nil
 	}
+
 	return ErrorTopicEmpty
 }
 
 // UnSubscribeAll 移除所有该topic的订阅关系
 func (b *Bucket) unSubscribeAll(fire *protocol.FireInfo) error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	if m, ok := b.topicRelevance[fire.Message.Topic]; ok {
-		for _, v := range m {
+	if m, ok := b.topicRelevance.Get(fire.Message.Topic); ok {
+		for _, v := range m.Items() {
 			_, err := v.unbindTopic([]string{fire.Message.Topic})
 			// 移除所有人的应该不需要执行回调方法
 			if v.onSystemRemove != nil {
@@ -427,11 +456,9 @@ func (b *Bucket) unSubscribeAll(fire *protocol.FireInfo) error {
 }
 
 func (b *Bucket) offlineUsers(fire *protocol.FireInfo) error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	if m, ok := b.topicRelevance[fire.Message.Topic]; ok {
+	if m, ok := b.topicRelevance.Get(fire.Message.Topic); ok {
 		userId := string(fire.Message.Data)
-		for _, v := range m {
+		for _, v := range m.Items() {
 			if v.UserID() == userId {
 				v.Close()
 				return nil

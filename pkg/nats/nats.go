@@ -5,22 +5,23 @@ import (
 
 	"github.com/holdno/firetower/config"
 	"github.com/holdno/firetower/protocol"
+	"go.uber.org/zap"
 
 	"github.com/nats-io/nats.go"
 )
 
 var _ protocol.Pusher = (*pusher)(nil)
 
-func MustSetupNatsPusher(cfg config.Nats, b protocol.Brazier, coder protocol.Coder, topicFunc func() map[string]uint64) protocol.Pusher {
+func MustSetupNatsPusher(cfg config.Nats, coder protocol.Coder, logger *zap.Logger, topicFunc func() map[string]uint64) protocol.Pusher {
 	if cfg.SubjectPrefix == "" {
 		cfg.SubjectPrefix = "firetower.topic."
 	}
 	p := &pusher{
 		subjectPrefix: cfg.SubjectPrefix,
-		b:             b,
 		coder:         coder,
 		currentTopic:  topicFunc,
 		msg:           make(chan *protocol.FireInfo, 10000),
+		logger:        logger,
 	}
 	var err error
 	p.nats, err = nats.Connect(cfg.Addr, nats.Name(cfg.ServerName), nats.UserInfo(cfg.UserName, cfg.Password))
@@ -38,6 +39,7 @@ type pusher struct {
 	b             protocol.Brazier
 	coder         protocol.Coder
 	currentTopic  func() map[string]uint64
+	logger        *zap.Logger
 }
 
 func (p *pusher) Publish(fire *protocol.FireInfo) error {
@@ -54,11 +56,12 @@ func (p *pusher) Receive() chan *protocol.FireInfo {
 			if _, exist := p.currentTopic()[topic]; exist {
 				fire := new(protocol.FireInfo)
 				if err := p.coder.Decode(msg.Data, fire); err != nil {
-					// todo log
+					p.logger.Error("failed to decode message", zap.String("data", string(msg.Data)), zap.Error(err), zap.String("topic", topic))
 					return
 				}
 				p.msg <- fire
 			}
+			msg.Ack()
 		})
 	})
 

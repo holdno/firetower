@@ -55,7 +55,7 @@ func (s *ClusterConnStore) init() error {
 }
 
 func (s *ClusterConnStore) ClusterMembers() ([]string, error) {
-	res := s.provider.dbconn.HGetAll(context.TODO(), ClusterConnKey)
+	res := s.provider.dbconn.HGetAll(context.TODO(), s.provider.keyPrefix+ClusterConnKey)
 	if res.Err() != nil {
 		return nil, res.Err()
 	}
@@ -85,7 +85,7 @@ func (s *ClusterConnStore) OneClientAtomicAddBy(clientIP string, num int64) erro
 	defer s.Unlock()
 	s.storage[clientIP] += num
 
-	res := s.provider.dbconn.HSet(context.TODO(), s.provider.keyPrefix+ClusterConnKey, clientIP, packClientConnNumberNow(uint64(num)))
+	res := s.provider.dbconn.HSet(context.TODO(), s.provider.keyPrefix+ClusterConnKey, clientIP, packClientConnNumberNow(uint64(s.storage[clientIP])))
 	if res.Err() != nil {
 		s.storage[clientIP] -= num
 		return res.Err()
@@ -129,7 +129,7 @@ local delTable = {}
 
 for i = 1, #clientConns, 2 do
 	local number, timestamp = struct.unpack("<i8<i8",clientConns[i+1])
-	if (currentTime > tostring(timestamp + 3))
+	if (currentTime > tostring(timestamp + 5))
 	then 
 		table.insert(delTable, clientConns[i])
 	end
@@ -141,12 +141,12 @@ return redis.call("hdel", key, unpack(delTable))
 func (s *ClusterConnStore) KeepClusterClear() {
 	go s.SelectMaster()
 	for {
+		time.Sleep(time.Second)
+
 		if !s.isMaster {
-			time.Sleep(time.Second)
 			continue
 		}
 
-		time.Sleep(time.Second)
 		result := s.provider.dbconn.EvalSha(context.TODO(), s.clusterShutdownCheckerScriptSHA, []string{s.provider.keyPrefix + ClusterConnKey, fmt.Sprintf("%d", time.Now().Unix())}, 2)
 		if result.Err() != nil {
 			// todo log
