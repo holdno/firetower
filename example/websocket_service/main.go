@@ -115,10 +115,10 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tower.SetReadHandler(func(fire *protocol.FireInfo) bool {
+	tower.SetReadHandler(func(fire protocol.ReadOnlyFire) bool {
 		// fire将会在handler执行结束后被回收
 		messageInfo := new(messageInfo)
-		err := json.Unmarshal(fire.Message.Data, messageInfo)
+		err := json.Unmarshal(fire.GetMessage().Data, messageInfo)
 		if err != nil {
 			return false
 		}
@@ -129,25 +129,25 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 			messageInfo.From = "system"
 			messageInfo.Data = []byte(fmt.Sprintf(`{"type": "change_name", "name": "%s"}`, tower.UserID()))
 			messageInfo.Type = "event"
-			fire.Message.Data, _ = json.Marshal(messageInfo)
-			tower.ToSelf(fire.Message.Data)
+			raw, _ := json.Marshal(messageInfo)
+			tower.SendToClient(raw)
 			return false
 		case strings.HasPrefix(msg, "/room "):
-			if err = tower.UnSubscribe(fire.Context, tower.TopicList()); err != nil {
+			if err = tower.UnSubscribe(fire.GetContext(), tower.TopicList()); err != nil {
 				messageInfo.From = "system"
 				messageInfo.Type = "event"
 				messageInfo.Data = []byte(fmt.Sprintf(`{"type": "error", "msg": "切换房间失败, %s"}`, err.Error()))
-				fire.Message.Data, _ = json.Marshal(messageInfo)
-				tower.ToSelf(fire.Message.Data)
+				raw, _ := json.Marshal(messageInfo)
+				tower.SendToClient(raw)
 				return false
 			}
 			roomCode := strings.TrimLeft(msg, "/room ")
-			if err = tower.Subscribe(fire.Context, []string{"/chat/" + roomCode}); err != nil {
+			if err = tower.Subscribe(fire.GetContext(), []string{"/chat/" + roomCode}); err != nil {
 				messageInfo.From = "system"
 				messageInfo.Type = "event"
 				messageInfo.Data = []byte(fmt.Sprintf(`{"type": "error", "msg": "切换房间失败, %s, 请重新尝试"}`, err.Error()))
-				fire.Message.Data, _ = json.Marshal(messageInfo)
-				tower.ToSelf(fire.Message.Data)
+				raw, _ := json.Marshal(messageInfo)
+				tower.SendToClient(raw)
 				return false
 			}
 
@@ -158,25 +158,28 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 			tower.SetUserID(messageInfo.From)
 		}
 		messageInfo.From = tower.UserID()
-		fire.Message.Data, _ = json.Marshal(messageInfo)
+		f := fire.Copy()
+		f.Message.Data, _ = json.Marshal(messageInfo)
+
 		// 做发送验证
 		// 判断发送方是否有权限向到达方发送内容
+		tower.SendToClient(f.Message.Json())
+		return false
+	})
+
+	tower.SetReceivedHandler(func(fi protocol.ReadOnlyFire) bool {
 		return true
 	})
 
-	tower.SetReceivedHandler(func(fi *protocol.FireInfo) bool {
-		return true
-	})
-
-	tower.SetReadTimeoutHandler(func(fire *protocol.FireInfo) {
+	tower.SetReadTimeoutHandler(func(fire protocol.ReadOnlyFire) {
 		messageInfo := new(messageInfo)
-		err := json.Unmarshal(fire.Message.Data, messageInfo)
+		err := json.Unmarshal(fire.GetMessage().Data, messageInfo)
 		if err != nil {
 			return
 		}
 		messageInfo.Type = "timeout"
 		b, _ := json.Marshal(messageInfo)
-		err = tower.ToSelf(b)
+		err = tower.SendToClient(b)
 		if err != towersvc.ErrorClose {
 			fmt.Println("err:", err)
 		}
@@ -187,7 +190,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		return true
 	})
 
-	tower.SetSubscribeHandler(func(context protocol.FireLife, topic []string) bool {
+	tower.SetSubscribeHandler(func(context protocol.FireLife, topic []string) {
 		for _, v := range topic {
 			if strings.HasPrefix(v, "/chat/") {
 				roomCode := strings.TrimPrefix(v, "/chat/")
@@ -196,15 +199,9 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 				messageInfo.Type = "event"
 				messageInfo.Data = []byte(fmt.Sprintf(`{"type": "change_room", "room": "%s"}`, roomCode))
 				msg, _ := json.Marshal(messageInfo)
-				tower.ToSelf(msg)
-				return true
+				tower.SendToClient(msg)
 			}
 		}
-		return true
-	})
-
-	tower.SetUnSubscribeHandler(func(context protocol.FireLife, topic []string) bool {
-		return true
 	})
 
 	ticker := time.NewTicker(time.Millisecond * 500)
@@ -225,7 +222,7 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 						continue
 					}
 
-					tower.ToSelf([]byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num)))
+					tower.SendToClient([]byte(fmt.Sprintf("{\"type\":\"onSubscribe\",\"data\":%d}", num)))
 					topicConnCache[v] = num
 				}
 			}

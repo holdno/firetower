@@ -44,6 +44,20 @@ func (f *FireInfo) Copy() FireInfo {
 	return *f
 }
 
+func (f *FireInfo) GetContext() FireLife {
+	return f.Context
+}
+
+func (f *FireInfo) GetMessage() TopicMessage {
+	return f.Message
+}
+
+type ReadOnlyFire interface {
+	GetContext() FireLife
+	GetMessage() TopicMessage
+	Copy() FireInfo
+}
+
 // TopicMessage 话题信息结构体
 type TopicMessage struct {
 	Topic string          `json:"topic"`

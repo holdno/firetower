@@ -8,9 +8,9 @@ import (
 type ServerSideTower interface {
 	SetOnConnectHandler(fn func() bool)
 	SetOnOfflineHandler(fn func())
-	SetReceivedHandler(fn func(*protocol.FireInfo) bool)
-	SetSubscribeHandler(fn func(context protocol.FireLife, topic []string) bool)
-	SetUnSubscribeHandler(fn func(context protocol.FireLife, topic []string) bool)
+	SetReceivedHandler(fn func(protocol.ReadOnlyFire) bool)
+	SetSubscribeHandler(fn func(context protocol.FireLife, topic []string))
+	SetUnSubscribeHandler(fn func(context protocol.FireLife, topic []string))
 	SetBeforeSubscribeHandler(fn func(context protocol.FireLife, topic []string) bool)
 	SetOnSystemRemove(fn func(topic string))
 	GetConnectNum(topic string) (uint64, error)

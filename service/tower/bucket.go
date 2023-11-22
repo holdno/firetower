@@ -281,8 +281,8 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 		for {
 			select {
 			case fire := <-tm.Receive():
-				for i := range tm.bucket {
-					tm.bucket[i].BuffChan <- fire
+				for _, b := range tm.bucket {
+					b.BuffChan <- fire
 				}
 			case <-tm.closeChan:
 				return
@@ -357,23 +357,20 @@ func (b *Bucket) consumer() {
 	for {
 		select {
 		case fire := <-b.BuffChan:
-			func() {
-				defer tm.brazier.Extinguished(fire)
-				switch fire.Message.Type {
-				case protocol.OfflineTopicByUserIdOperation:
-					// 需要退订的topic和user_id
-					// todo use api
-					b.unSubscribeByUserId(fire)
-				case protocol.OfflineTopicOperation:
-					// todo use api
-					b.unSubscribeAll(fire)
-				case protocol.OfflineUserOperation:
-					// todo use api
-					b.offlineUsers(fire)
-				default:
-					b.push(fire)
-				}
-			}()
+			switch fire.Message.Type {
+			case protocol.OfflineTopicByUserIdOperation:
+				// 需要退订的topic和user_id
+				// todo use api
+				b.unSubscribeByUserId(fire)
+			case protocol.OfflineTopicOperation:
+				// todo use api
+				b.unSubscribeAll(fire)
+			case protocol.OfflineUserOperation:
+				// todo use api
+				b.offlineUsers(fire)
+			default:
+				b.push(fire)
+			}
 		}
 	}
 }
@@ -416,11 +413,11 @@ func (b *Bucket) push(message *protocol.FireInfo) error {
 	if m, ok := b.topicRelevance.Get(message.Message.Topic); ok {
 		for _, v := range m.Items() {
 			if v.isClose {
-				return ErrorClose
+				continue
 			}
 
 			if v.receivedHandler != nil && !v.receivedHandler(message) {
-				return nil
+				continue
 			}
 
 			if v.ws != nil {
@@ -437,9 +434,8 @@ func (b *Bucket) push(message *protocol.FireInfo) error {
 				}()
 			}
 		}
-		return nil
 	}
-	return ErrorTopicEmpty
+	return nil
 }
 
 // UnSubscribeByUserId 服务端指定某个用户退订某个topic

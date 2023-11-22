@@ -42,12 +42,12 @@ type FireTower struct {
 
 	onConnectHandler       func() bool
 	onOfflineHandler       func()
-	receivedHandler        func(*protocol.FireInfo) bool
-	readHandler            func(*protocol.FireInfo) bool
-	readTimeoutHandler     func(*protocol.FireInfo)
-	sendTimeoutHandler     func(*protocol.FireInfo)
-	subscribeHandler       func(context protocol.FireLife, topic []string) bool
-	unSubscribeHandler     func(context protocol.FireLife, topic []string) bool
+	receivedHandler        func(protocol.ReadOnlyFire) bool
+	readHandler            func(protocol.ReadOnlyFire) bool
+	readTimeoutHandler     func(protocol.ReadOnlyFire)
+	sendTimeoutHandler     func(protocol.ReadOnlyFire)
+	subscribeHandler       func(context protocol.FireLife, topic []string)
+	unSubscribeHandler     func(context protocol.FireLife, topic []string)
 	beforeSubscribeHandler func(context protocol.FireLife, topic []string) bool
 	onSystemRemove         func(topic string)
 }
@@ -100,6 +100,7 @@ func buildNewTower(ws *websocket.Conn, clientID string) *FireTower {
 	t.ws = ws
 	t.isClose = false
 	t.closeChan = make(chan struct{})
+	t.timeout = time.Second * 3
 
 	t.readHandler = nil
 	t.readTimeoutHandler = nil
@@ -242,13 +243,13 @@ func (t *FireTower) sendLoop() {
 		select {
 		case wsMsg := <-t.sendOut:
 			if t.ws != nil {
-				if err := t.ToSelf(wsMsg); err != nil {
+				if err := t.SendToClient(wsMsg); err != nil {
 					goto collapse
 				}
 			}
 		case <-heartTicker.C:
 			// sendMessage.Data = []byte{104, 101, 97, 114, 116, 98, 101, 97, 116} // []byte("heartbeat")
-			if err := t.ToSelf(heartbeat); err != nil {
+			if err := t.SendToClient(heartbeat); err != nil {
 				goto collapse
 			}
 		case <-t.closeChan:
@@ -391,10 +392,10 @@ func (t *FireTower) Publish(fire *protocol.FireInfo) error {
 	return nil
 }
 
-// ToSelf 向自己推送消息
+// SendToClient 向自己推送消息
 // 这里描述一下使用场景
 // 只针对当前客户端进行的推送请调用该方法
-func (t *FireTower) ToSelf(b []byte) error {
+func (t *FireTower) SendToClient(b []byte) error {
 	if t.ws == nil {
 		return ErrorServerSideMode
 	}
@@ -416,25 +417,25 @@ func (t *FireTower) SetOnOfflineHandler(fn func()) {
 	t.onOfflineHandler = fn
 }
 
-func (t *FireTower) SetReceivedHandler(fn func(*protocol.FireInfo) bool) {
+func (t *FireTower) SetReceivedHandler(fn func(protocol.ReadOnlyFire) bool) {
 	t.receivedHandler = fn
 }
 
 // SetReadHandler 客户端推送事件
 // 接收到用户publish的消息时触发
-func (t *FireTower) SetReadHandler(fn func(*protocol.FireInfo) bool) {
+func (t *FireTower) SetReadHandler(fn func(protocol.ReadOnlyFire) bool) {
 	t.readHandler = fn
 }
 
 // SetSubscribeHandler 订阅事件
 // 用户订阅topic后触发
-func (t *FireTower) SetSubscribeHandler(fn func(context protocol.FireLife, topic []string) bool) {
+func (t *FireTower) SetSubscribeHandler(fn func(context protocol.FireLife, topic []string)) {
 	t.subscribeHandler = fn
 }
 
 // SetUnSubscribeHandler 取消订阅事件
 // 用户取消订阅topic后触发
-func (t *FireTower) SetUnSubscribeHandler(fn func(context protocol.FireLife, topic []string) bool) {
+func (t *FireTower) SetUnSubscribeHandler(fn func(context protocol.FireLife, topic []string)) {
 	t.unSubscribeHandler = fn
 }
 
@@ -446,11 +447,11 @@ func (t *FireTower) SetBeforeSubscribeHandler(fn func(context protocol.FireLife,
 
 // SetReadTimeoutHandler 超时回调
 // readIn channal写满了  生产 > 消费的情况下触发超时机制
-func (t *FireTower) SetReadTimeoutHandler(fn func(*protocol.FireInfo)) {
+func (t *FireTower) SetReadTimeoutHandler(fn func(protocol.ReadOnlyFire)) {
 	t.readTimeoutHandler = fn
 }
 
-func (t *FireTower) SetSendTimeoutHandler(fn func(*protocol.FireInfo)) {
+func (t *FireTower) SetSendTimeoutHandler(fn func(protocol.ReadOnlyFire)) {
 	t.sendTimeoutHandler = fn
 }
 
