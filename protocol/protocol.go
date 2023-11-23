@@ -61,7 +61,7 @@ type ReadOnlyFire[T any] interface {
 // TopicMessage 话题信息结构体
 type TopicMessage[T any] struct {
 	Topic string        `json:"topic"`
-	Data  T             `json:"data"` // 可能是个json
+	Data  T             `json:"data,omitempty"`
 	Type  FireOperation `json:"type"`
 }
 
