@@ -55,7 +55,7 @@ const (
 
 func startTower() {
 	// 全局唯一id生成器
-	tm, err := towersvc.Setup(config.FireTowerConfig{
+	tm, err := towersvc.Setup[jsoniter.RawMessage](config.FireTowerConfig{
 		WriteChanLens: 1000,
 		ReadChanLens:  1000,
 		Heartbeat:     30,
@@ -76,11 +76,18 @@ func startTower() {
 		clientID: "1",
 	}
 
-	http.HandleFunc(websocketPath, Websocket)
+	tower := &Tower{
+		tm: tm,
+	}
+	http.HandleFunc(websocketPath, tower.Websocket)
 	tm.Logger().Info("http server start", zap.String("address", listenAddress))
 	if err := http.ListenAndServe(listenAddress, nil); err != nil {
 		panic(err)
 	}
+}
+
+type Tower struct {
+	tm towersvc.Manager[jsoniter.RawMessage]
 }
 
 const (
@@ -88,29 +95,29 @@ const (
 )
 
 // Websocket http转websocket连接 并实例化firetower
-func Websocket(w http.ResponseWriter, r *http.Request) {
+func (t *Tower) Websocket(w http.ResponseWriter, r *http.Request) {
 	// 做用户身份验证
 
 	// 验证成功才升级连接
 	ws, _ := upgrader.Upgrade(w, r, nil)
 
 	id := utils.IDWorker().GetId()
-	tower, err := towersvc.BuildTower(ws, strconv.FormatInt(id, 10))
+	tower, err := t.tm.BuildTower(ws, strconv.FormatInt(id, 10))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
 	}
 
-	tower.SetReadHandler(func(fire protocol.ReadOnlyFire) bool {
+	tower.SetReadHandler(func(fire protocol.ReadOnlyFire[jsoniter.RawMessage]) bool {
 		return true
 	})
 
-	tower.SetReceivedHandler(func(fi protocol.ReadOnlyFire) bool {
+	tower.SetReceivedHandler(func(fi protocol.ReadOnlyFire[jsoniter.RawMessage]) bool {
 		return true
 	})
 
-	tower.SetReadTimeoutHandler(func(fire protocol.ReadOnlyFire) {
+	tower.SetReadTimeoutHandler(func(fire protocol.ReadOnlyFire[jsoniter.RawMessage]) {
 		messageInfo := new(messageInfo)
 		err := json.Unmarshal(fire.GetMessage().Data, messageInfo)
 		if err != nil {
@@ -180,7 +187,7 @@ func TestBaseTower(t *testing.T) {
 	time.Sleep(time.Second)
 
 	client1 := buildClient(t)
-	subMsg := protocol.TopicMessage{
+	subMsg := protocol.TopicMessage[jsoniter.RawMessage]{
 		Topic: bindTopic,
 		Type:  protocol.SubscribeOperation,
 	}
@@ -198,13 +205,13 @@ func TestBaseTower(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testMessage := protocol.TopicMessage{
+	testMessage := protocol.TopicMessage[jsoniter.RawMessage]{
 		Topic: subMsg.Topic,
 		Type:  protocol.PublishOperation,
 		Data:  jsoniter.RawMessage([]byte("\"hi\"")),
 	}
 
-	fire := new(protocol.FireInfo) // 从对象池中获取消息对象 降低GC压力
+	fire := new(protocol.FireInfo[jsoniter.RawMessage]) // 从对象池中获取消息对象 降低GC压力
 	fire.MessageType = 1
 	if err := jsoniter.Unmarshal(testMessage.Json(), &fire.Message); err != nil {
 		t.Fatal(err)

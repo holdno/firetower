@@ -54,3 +54,7 @@ func (o FireOperation) String() string {
 		return "unknown"
 	}
 }
+
+const (
+	SYSTEM_CMD_REMOVE_USER = "remove_user"
+)

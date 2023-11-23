@@ -10,17 +10,17 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-var _ protocol.Pusher = (*pusher)(nil)
+var _ protocol.Pusher[any] = (*pusher[any])(nil)
 
-func MustSetupNatsPusher(cfg config.Nats, coder protocol.Coder, logger *zap.Logger, topicFunc func() map[string]uint64) protocol.Pusher {
+func MustSetupNatsPusher[T any](cfg config.Nats, coder protocol.Coder[T], logger *zap.Logger, topicFunc func() map[string]uint64) protocol.Pusher[T] {
 	if cfg.SubjectPrefix == "" {
 		cfg.SubjectPrefix = "firetower.topic."
 	}
-	p := &pusher{
+	p := &pusher[T]{
 		subjectPrefix: cfg.SubjectPrefix,
 		coder:         coder,
 		currentTopic:  topicFunc,
-		msg:           make(chan *protocol.FireInfo, 10000),
+		msg:           make(chan *protocol.FireInfo[T], 10000),
 		logger:        logger,
 	}
 	var err error
@@ -31,30 +31,30 @@ func MustSetupNatsPusher(cfg config.Nats, coder protocol.Coder, logger *zap.Logg
 	return p
 }
 
-type pusher struct {
+type pusher[T any] struct {
 	subjectPrefix string
-	msg           chan *protocol.FireInfo
+	msg           chan *protocol.FireInfo[T]
 	nats          *nats.Conn
 	once          sync.Once
-	b             protocol.Brazier
-	coder         protocol.Coder
+	b             protocol.Brazier[T]
+	coder         protocol.Coder[T]
 	currentTopic  func() map[string]uint64
 	logger        *zap.Logger
 }
 
-func (p *pusher) Publish(fire *protocol.FireInfo) error {
+func (p *pusher[T]) Publish(fire *protocol.FireInfo[T]) error {
 	msg := nats.NewMsg(p.subjectPrefix + fire.Message.Topic)
 	msg.Header.Set("topic", fire.Message.Topic)
 	msg.Data = p.coder.Encode(fire)
 	return p.nats.PublishMsg(msg)
 }
 
-func (p *pusher) Receive() chan *protocol.FireInfo {
+func (p *pusher[T]) Receive() chan *protocol.FireInfo[T] {
 	p.once.Do(func() {
 		p.nats.Subscribe(p.subjectPrefix+">", func(msg *nats.Msg) {
 			topic := msg.Header.Get("topic")
 			if _, exist := p.currentTopic()[topic]; exist {
-				fire := new(protocol.FireInfo)
+				fire := new(protocol.FireInfo[T])
 				if err := p.coder.Decode(msg.Data, fire); err != nil {
 					p.logger.Error("failed to decode message", zap.String("data", string(msg.Data)), zap.Error(err), zap.String("topic", topic))
 					return

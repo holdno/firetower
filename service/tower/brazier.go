@@ -1,28 +1,45 @@
 package tower
 
 import (
+	"sync"
+
 	"github.com/holdno/firetower/protocol"
 )
 
-type brazier struct {
-	len int
+func newBrazier[T any]() *brazier[T] {
+	return &brazier[T]{
+		pool: &sync.Pool{
+			New: func() interface{} {
+				return &protocol.FireInfo[T]{
+					Context: protocol.FireLife{},
+					Message: protocol.TopicMessage[T]{},
+				}
+			},
+		},
+	}
 }
 
-func (b *brazier) Extinguished(fire *protocol.FireInfo) {
+type brazier[T any] struct {
+	len  int
+	pool *sync.Pool
+}
+
+func (b *brazier[T]) Extinguished(fire *protocol.FireInfo[T]) {
 	if b.len > 100000 {
 		return
 	}
+	var empty T
 	b.len++
 	fire.MessageType = 0
-	fire.Message.Data = []byte("")
+	fire.Message.Data = empty
 	fire.Message.Topic = ""
 	fire.Message.Type = 0
-	firePool.Put(fire)
+	b.pool.Put(fire)
 }
 
-func (b *brazier) LightAFire() *protocol.FireInfo {
+func (b *brazier[T]) LightAFire() *protocol.FireInfo[T] {
 	b.len--
-	return firePool.Get().(*protocol.FireInfo)
+	return b.pool.Get().(*protocol.FireInfo[T])
 }
 
 type PusherInfo interface {
@@ -30,8 +47,8 @@ type PusherInfo interface {
 	UserID() string
 }
 
-func NewFire(source protocol.FireSource, tower PusherInfo) *protocol.FireInfo {
-	f := tm.brazier.LightAFire()
+func (t *TowerManager[T]) NewFire(source protocol.FireSource, tower PusherInfo) *protocol.FireInfo[T] {
+	f := t.brazier.LightAFire()
 	f.Message.Type = protocol.PublishOperation
 	f.Context.Reset(source, tower.ClientID(), tower.UserID())
 	return f

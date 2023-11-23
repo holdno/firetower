@@ -22,7 +22,8 @@ var (
 
 // FireTower 客户端连接结构体
 // 包含了客户端一个连接的所有信息
-type FireTower struct {
+type FireTower[T any] struct {
+	tm        *TowerManager[T]
 	connID    uint64 // 连接id 每台服务器上该id从1开始自增
 	clientID  string // 客户端id 用来做业务逻辑
 	userID    string // 一般业务中每个连接都是一个用户 用来给业务提供用户识别
@@ -32,69 +33,70 @@ type FireTower struct {
 
 	logger    *zap.Logger
 	timeout   time.Duration
-	readIn    chan *protocol.FireInfo // 读取队列
-	sendOut   chan []byte             // 发送队列
-	ws        *websocket.Conn         // 保存底层websocket连接
-	topic     sync.Map                // 订阅topic列表
-	isClose   bool                    // 判断当前websocket是否被关闭
-	closeChan chan struct{}           // 用来作为关闭websocket的触发点
-	mutex     sync.Mutex              // 避免并发close chan
+	readIn    chan *protocol.FireInfo[T] // 读取队列
+	sendOut   chan []byte                // 发送队列
+	ws        *websocket.Conn            // 保存底层websocket连接
+	topic     sync.Map                   // 订阅topic列表
+	isClose   bool                       // 判断当前websocket是否被关闭
+	closeChan chan struct{}              // 用来作为关闭websocket的触发点
+	mutex     sync.Mutex                 // 避免并发close chan
 
 	onConnectHandler       func() bool
 	onOfflineHandler       func()
-	receivedHandler        func(protocol.ReadOnlyFire) bool
-	readHandler            func(protocol.ReadOnlyFire) bool
-	readTimeoutHandler     func(protocol.ReadOnlyFire)
-	sendTimeoutHandler     func(protocol.ReadOnlyFire)
+	receivedHandler        func(protocol.ReadOnlyFire[T]) bool
+	readHandler            func(protocol.ReadOnlyFire[T]) bool
+	readTimeoutHandler     func(protocol.ReadOnlyFire[T])
+	sendTimeoutHandler     func(protocol.ReadOnlyFire[T])
 	subscribeHandler       func(context protocol.FireLife, topic []string)
 	unSubscribeHandler     func(context protocol.FireLife, topic []string)
 	beforeSubscribeHandler func(context protocol.FireLife, topic []string) bool
 	onSystemRemove         func(topic string)
 }
 
-func (t *FireTower) ClientID() string {
+func (t *FireTower[T]) ClientID() string {
 	return t.clientID
 }
 
-func (t *FireTower) UserID() string {
+func (t *FireTower[T]) UserID() string {
 	return t.userID
 }
 
-func (t *FireTower) SetUserID(id string) {
+func (t *FireTower[T]) SetUserID(id string) {
 	t.userID = id
 }
 
-func (t *FireTower) Ext() *sync.Map {
+func (t *FireTower[T]) Ext() *sync.Map {
 	return t.ext
 }
 
 // Init 初始化firetower
 // 在调用firetower前请一定要先调用Init方法
-func Setup(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, error) {
+func Setup[T any](cfg config.FireTowerConfig, opts ...TowerOption[T]) (Manager[T], error) {
 	towerPool.New = func() interface{} {
-		return &FireTower{}
+		return &FireTower[T]{}
 	}
 	// 构建服务架构
 	return BuildFoundation(cfg, opts...)
 }
 
 // BuildTower 实例化一个websocket客户端
-func BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower, err error) {
+func (t *TowerManager[T]) BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower[T], err error) {
 	if ws == nil {
-		tm.logger.Error("empty websocket connect")
+		t.logger.Error("empty websocket connect")
 		return nil, errors.New("empty websocket connect")
 	}
-	tower = buildNewTower(ws, clientId)
+	tower = buildNewTower(t, ws, clientId)
 	return
 }
 
-func buildNewTower(ws *websocket.Conn, clientID string) *FireTower {
-	t := towerPool.Get().(*FireTower)
+func buildNewTower[T any](tm *TowerManager[T], ws *websocket.Conn, clientID string) *FireTower[T] {
+	t := towerPool.Get().(*FireTower[T])
+	t.tm = tm
 	t.connID = getConnId()
 	t.clientID = clientID
 	t.startTime = time.Now()
 	t.ext = &sync.Map{}
-	t.readIn = make(chan *protocol.FireInfo, tm.cfg.ReadChanLens)
+	t.readIn = make(chan *protocol.FireInfo[T], tm.cfg.ReadChanLens)
 	t.sendOut = make(chan []byte, tm.cfg.WriteChanLens)
 	t.topic = sync.Map{}
 	t.ws = ws
@@ -114,15 +116,15 @@ func buildNewTower(ws *websocket.Conn, clientID string) *FireTower {
 	return t
 }
 
-func (t *FireTower) OnClose() chan struct{} {
+func (t *FireTower[T]) OnClose() chan struct{} {
 	return t.closeChan
 }
 
 // Run 启动websocket客户端
-func (t *FireTower) Run() {
+func (t *FireTower[T]) Run() {
 	t.logger.Debug("new tower builded")
-	tm.connCounter <- counterMsg{
-		Key: tm.ip,
+	t.tm.connCounter <- counterMsg{
+		Key: t.tm.ip,
 		Num: 1,
 	}
 
@@ -146,7 +148,7 @@ func (t *FireTower) Run() {
 	t.sendLoop()
 }
 
-func (t *FireTower) TopicList() []string {
+func (t *FireTower[T]) TopicList() []string {
 	var topics []string
 	t.topic.Range(func(key, value any) bool {
 		topics = append(topics, key.(string))
@@ -156,11 +158,11 @@ func (t *FireTower) TopicList() []string {
 }
 
 // 订阅topic的绑定过程
-func (t *FireTower) bindTopic(topic []string) ([]string, error) {
+func (t *FireTower[T]) bindTopic(topic []string) ([]string, error) {
 	var (
 		addTopic []string
 	)
-	bucket := tm.GetBucket(t)
+	bucket := t.tm.GetBucket(t)
 	for _, v := range topic {
 		if _, loaded := t.topic.LoadOrStore(v, struct{}{}); !loaded {
 			addTopic = append(addTopic, v) // 待订阅的topic
@@ -175,9 +177,9 @@ func (t *FireTower) bindTopic(topic []string) ([]string, error) {
 	return addTopic, nil
 }
 
-func (t *FireTower) unbindTopic(topic []string) []string {
+func (t *FireTower[T]) unbindTopic(topic []string) []string {
 	var delTopic []string // 待取消订阅的topic列表
-	bucket := tm.GetBucket(t)
+	bucket := t.tm.GetBucket(t)
 	for _, v := range topic {
 		if _, loaded := t.topic.LoadAndDelete(v); loaded {
 			// 如果客户端已经订阅过该topic才执行退订
@@ -188,7 +190,7 @@ func (t *FireTower) unbindTopic(topic []string) []string {
 	return delTopic
 }
 
-func (t *FireTower) read() (*protocol.FireInfo, error) {
+func (t *FireTower[T]) read() (*protocol.FireInfo[T], error) {
 	if t.isClose {
 		return nil, ErrorClose
 	}
@@ -197,7 +199,7 @@ func (t *FireTower) read() (*protocol.FireInfo, error) {
 
 // Close 关闭客户端连接并注销
 // 调用该方法会完全注销掉由BuildTower生成的一切内容
-func (t *FireTower) Close() {
+func (t *FireTower[T]) Close() {
 	t.logger.Debug("close connect")
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -211,8 +213,8 @@ func (t *FireTower) Close() {
 		if len(topicSlice) > 0 {
 			delTopic := t.unbindTopic(topicSlice)
 
-			fire := NewFire(protocol.SourceSystem, t)
-			defer tm.brazier.Extinguished(fire)
+			fire := t.tm.NewFire(protocol.SourceSystem, t)
+			defer t.tm.brazier.Extinguished(fire)
 
 			if t.unSubscribeHandler != nil {
 				t.unSubscribeHandler(fire.Context, delTopic)
@@ -223,8 +225,8 @@ func (t *FireTower) Close() {
 			t.ws.Close()
 		}
 
-		tm.connCounter <- counterMsg{
-			Key: tm.ip,
+		t.tm.connCounter <- counterMsg{
+			Key: t.tm.ip,
 			Num: -1,
 		}
 		close(t.closeChan)
@@ -237,8 +239,8 @@ func (t *FireTower) Close() {
 
 var heartbeat = []byte{104, 101, 97, 114, 116, 98, 101, 97, 116}
 
-func (t *FireTower) sendLoop() {
-	heartTicker := time.NewTicker(time.Duration(tm.cfg.Heartbeat) * time.Second)
+func (t *FireTower[T]) sendLoop() {
+	heartTicker := time.NewTicker(time.Duration(t.tm.cfg.Heartbeat) * time.Second)
 	for {
 		select {
 		case wsMsg := <-t.sendOut:
@@ -261,13 +263,13 @@ collapse:
 	t.Close()
 }
 
-func (t *FireTower) readLoop() {
+func (t *FireTower[T]) readLoop() {
 	if t.ws == nil {
 		return
 	}
 	defer func() {
 		if err := recover(); err != nil {
-			tm.logger.Error("readloop panic", zap.Any("error", err))
+			t.tm.logger.Error("readloop panic", zap.Any("error", err))
 		}
 	}()
 	for {
@@ -275,7 +277,7 @@ func (t *FireTower) readLoop() {
 		if err != nil { // 断开连接
 			goto collapse // 出现问题烽火台直接坍塌
 		}
-		fire := NewFire(protocol.SourceClient, t) // 从对象池中获取消息对象 降低GC压力
+		fire := t.tm.NewFire(protocol.SourceClient, t) // 从对象池中获取消息对象 降低GC压力
 		fire.MessageType = messageType
 		if err := json.Unmarshal(data, &fire.Message); err != nil {
 			t.logger.Error("failed to unmarshal client data, filtered", zap.Error(err))
@@ -295,7 +297,7 @@ func (t *FireTower) readLoop() {
 				t.logger.Error("readloop timeout", zap.Any("data", data))
 			case <-t.closeChan:
 			}
-			tm.brazier.Extinguished(fire)
+			t.tm.brazier.Extinguished(fire)
 		}()
 
 	}
@@ -305,7 +307,7 @@ collapse:
 
 // 处理前端发来的数据
 // 这里要做逻辑拆分，判断用户是要进行通信还是topic订阅
-func (t *FireTower) readDispose() {
+func (t *FireTower[T]) readDispose() {
 	for {
 		fire, err := t.read()
 		if err != nil {
@@ -317,8 +319,8 @@ func (t *FireTower) readDispose() {
 	}
 }
 
-func (t *FireTower) readLogic(fire *protocol.FireInfo) error {
-	defer tm.brazier.Extinguished(fire)
+func (t *FireTower[T]) readLogic(fire *protocol.FireInfo[T]) error {
+	defer t.tm.brazier.Extinguished(fire)
 	if t.isClose {
 		return nil
 	} else {
@@ -354,7 +356,7 @@ func (t *FireTower) readLogic(fire *protocol.FireInfo) error {
 	return nil
 }
 
-func (t *FireTower) Subscribe(context protocol.FireLife, topics []string) error {
+func (t *FireTower[T]) Subscribe(context protocol.FireLife, topics []string) error {
 	// 如果设置了订阅前触发事件则调用
 	if t.beforeSubscribeHandler != nil {
 		ok := t.beforeSubscribeHandler(context, topics)
@@ -372,7 +374,7 @@ func (t *FireTower) Subscribe(context protocol.FireLife, topics []string) error 
 	return nil
 }
 
-func (t *FireTower) UnSubscribe(context protocol.FireLife, topics []string) error {
+func (t *FireTower[T]) UnSubscribe(context protocol.FireLife, topics []string) error {
 	delTopics := t.unbindTopic(topics)
 
 	if t.unSubscribeHandler != nil {
@@ -383,8 +385,8 @@ func (t *FireTower) UnSubscribe(context protocol.FireLife, topics []string) erro
 
 // Publish 推送接口
 // 通过BuildTower生成的实例都可以调用该方法来达到推送的目的
-func (t *FireTower) Publish(fire *protocol.FireInfo) error {
-	err := tm.Publish(fire)
+func (t *FireTower[T]) Publish(fire *protocol.FireInfo[T]) error {
+	err := t.tm.Publish(fire)
 	if err != nil {
 		t.logger.Error("failed to publish message", zap.Error(err))
 		return err
@@ -395,7 +397,7 @@ func (t *FireTower) Publish(fire *protocol.FireInfo) error {
 // SendToClient 向自己推送消息
 // 这里描述一下使用场景
 // 只针对当前客户端进行的推送请调用该方法
-func (t *FireTower) SendToClient(b []byte) error {
+func (t *FireTower[T]) SendToClient(b []byte) error {
 	if t.ws == nil {
 		return ErrorServerSideMode
 	}
@@ -408,67 +410,67 @@ func (t *FireTower) SendToClient(b []byte) error {
 }
 
 // SetOnConnectHandler 建立连接事件
-func (t *FireTower) SetOnConnectHandler(fn func() bool) {
+func (t *FireTower[T]) SetOnConnectHandler(fn func() bool) {
 	t.onConnectHandler = fn
 }
 
 // SetOnOfflineHandler 用户连接关闭时触发
-func (t *FireTower) SetOnOfflineHandler(fn func()) {
+func (t *FireTower[T]) SetOnOfflineHandler(fn func()) {
 	t.onOfflineHandler = fn
 }
 
-func (t *FireTower) SetReceivedHandler(fn func(protocol.ReadOnlyFire) bool) {
+func (t *FireTower[T]) SetReceivedHandler(fn func(protocol.ReadOnlyFire[T]) bool) {
 	t.receivedHandler = fn
 }
 
 // SetReadHandler 客户端推送事件
 // 接收到用户publish的消息时触发
-func (t *FireTower) SetReadHandler(fn func(protocol.ReadOnlyFire) bool) {
+func (t *FireTower[T]) SetReadHandler(fn func(protocol.ReadOnlyFire[T]) bool) {
 	t.readHandler = fn
 }
 
 // SetSubscribeHandler 订阅事件
 // 用户订阅topic后触发
-func (t *FireTower) SetSubscribeHandler(fn func(context protocol.FireLife, topic []string)) {
+func (t *FireTower[T]) SetSubscribeHandler(fn func(context protocol.FireLife, topic []string)) {
 	t.subscribeHandler = fn
 }
 
 // SetUnSubscribeHandler 取消订阅事件
 // 用户取消订阅topic后触发
-func (t *FireTower) SetUnSubscribeHandler(fn func(context protocol.FireLife, topic []string)) {
+func (t *FireTower[T]) SetUnSubscribeHandler(fn func(context protocol.FireLife, topic []string)) {
 	t.unSubscribeHandler = fn
 }
 
 // SetBeforeSubscribeHandler 订阅前回调事件
 // 用户订阅topic前触发
-func (t *FireTower) SetBeforeSubscribeHandler(fn func(context protocol.FireLife, topic []string) bool) {
+func (t *FireTower[T]) SetBeforeSubscribeHandler(fn func(context protocol.FireLife, topic []string) bool) {
 	t.beforeSubscribeHandler = fn
 }
 
 // SetReadTimeoutHandler 超时回调
 // readIn channal写满了  生产 > 消费的情况下触发超时机制
-func (t *FireTower) SetReadTimeoutHandler(fn func(protocol.ReadOnlyFire)) {
+func (t *FireTower[T]) SetReadTimeoutHandler(fn func(protocol.ReadOnlyFire[T])) {
 	t.readTimeoutHandler = fn
 }
 
-func (t *FireTower) SetSendTimeoutHandler(fn func(protocol.ReadOnlyFire)) {
+func (t *FireTower[T]) SetSendTimeoutHandler(fn func(protocol.ReadOnlyFire[T])) {
 	t.sendTimeoutHandler = fn
 }
 
 // SetOnSystemRemove 系统移除某个用户的topic订阅
-func (t *FireTower) SetOnSystemRemove(fn func(topic string)) {
+func (t *FireTower[T]) SetOnSystemRemove(fn func(topic string)) {
 	t.onSystemRemove = fn
 }
 
 // GetConnectNum 获取话题订阅数的grpc方法封装
-func (t *FireTower) GetConnectNum(topic string) (uint64, error) {
-	number, err := tm.stores.ClusterTopicStore().GetTopicConnNum(topic)
+func (t *FireTower[T]) GetConnectNum(topic string) (uint64, error) {
+	number, err := t.tm.stores.ClusterTopicStore().GetTopicConnNum(topic)
 	if err != nil {
 		return 0, err
 	}
 	return number, nil
 }
 
-func (t *FireTower) Logger() *zap.Logger {
+func (t *FireTower[T]) Logger() *zap.Logger {
 	return t.logger
 }

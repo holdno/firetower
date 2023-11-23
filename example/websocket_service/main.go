@@ -51,7 +51,7 @@ var systemer *SystemPusher
 
 func main() {
 	// 全局唯一id生成器
-	tm, err := towersvc.Setup(config.FireTowerConfig{
+	tm, err := towersvc.Setup[json.RawMessage](config.FireTowerConfig{
 		WriteChanLens: 1000,
 		Heartbeat:     30,
 		ServiceMode:   config.SingleMode,
@@ -86,36 +86,43 @@ func main() {
 	go func() {
 		for {
 			time.Sleep(time.Second * 60)
-			f := tower.NewFire(protocol.SourceSystem, systemer)
+			f := tm.NewFire(protocol.SourceSystem, systemer)
 			f.Message.Topic = "/chat/world"
 			f.Message.Data = []byte(fmt.Sprintf("{\"type\":\"publish\",\"data\":\"请通过 room 命令切换聊天室\",\"from\":\"system\"}"))
 			tm.Publish(f)
 		}
 	}()
 
-	http.HandleFunc("/ws", Websocket)
+	tower := &Tower{
+		tm: tm,
+	}
+	http.HandleFunc("/ws", tower.Websocket)
 	tm.Logger().Info("http server start", zap.String("address", "0.0.0.0:9999"))
 	if err := http.ListenAndServe("0.0.0.0:9999", nil); err != nil {
 		panic(err)
 	}
 }
 
+type Tower struct {
+	tm tower.Manager[json.RawMessage]
+}
+
 // Websocket http转websocket连接 并实例化firetower
-func Websocket(w http.ResponseWriter, r *http.Request) {
+func (t *Tower) Websocket(w http.ResponseWriter, r *http.Request) {
 	// 做用户身份验证
 
 	// 验证成功才升级连接
 	ws, _ := upgrader.Upgrade(w, r, nil)
 
 	id := utils.IDWorker().GetId()
-	tower, err := towersvc.BuildTower(ws, strconv.FormatInt(id, 10))
+	tower, err := t.tm.BuildTower(ws, strconv.FormatInt(id, 10))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
 	}
 
-	tower.SetReadHandler(func(fire protocol.ReadOnlyFire) bool {
+	tower.SetReadHandler(func(fire protocol.ReadOnlyFire[json.RawMessage]) bool {
 		// fire将会在handler执行结束后被回收
 		messageInfo := new(messageInfo)
 		err := json.Unmarshal(fire.GetMessage().Data, messageInfo)
@@ -167,11 +174,11 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 		return false
 	})
 
-	tower.SetReceivedHandler(func(fi protocol.ReadOnlyFire) bool {
+	tower.SetReceivedHandler(func(fi protocol.ReadOnlyFire[json.RawMessage]) bool {
 		return true
 	})
 
-	tower.SetReadTimeoutHandler(func(fire protocol.ReadOnlyFire) {
+	tower.SetReadTimeoutHandler(func(fire protocol.ReadOnlyFire[json.RawMessage]) {
 		messageInfo := new(messageInfo)
 		err := json.Unmarshal(fire.GetMessage().Data, messageInfo)
 		if err != nil {
