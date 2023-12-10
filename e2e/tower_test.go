@@ -126,7 +126,7 @@ func (t *Tower) Websocket(w http.ResponseWriter, r *http.Request) {
 		messageInfo.Type = "timeout"
 		b, _ := json.Marshal(messageInfo)
 		err = tower.SendToClient(b)
-		if err != towersvc.ErrorClose {
+		if err != towersvc.ErrorClosed {
 			fmt.Println("err:", err)
 		}
 	})
@@ -158,7 +158,13 @@ func (t *Tower) Websocket(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 
-	tower.Run()
+	go tower.Run()
+
+	ws.Close()
+
+	if err := tower.SendToClient([]byte("test")); err != nil {
+		fmt.Println("send error", err)
+	}
 }
 
 func buildClient(t *testing.T) *websocket.Conn {
@@ -172,7 +178,7 @@ func buildClient(t *testing.T) *websocket.Conn {
 		for {
 			_, data, err := client.ReadMessage()
 			if err != nil {
-				panic(err)
+				return
 			}
 
 			fmt.Println("--- client receive message ---")

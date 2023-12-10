@@ -25,7 +25,7 @@ type brazier[T any] struct {
 }
 
 func (b *brazier[T]) Extinguished(fire *protocol.FireInfo[T]) {
-	if b.len > 100000 {
+	if fire == nil || b.len > 100000 {
 		return
 	}
 	var empty T

@@ -187,7 +187,7 @@ func (t *Tower) Websocket(w http.ResponseWriter, r *http.Request) {
 		messageInfo.Type = "timeout"
 		b, _ := json.Marshal(messageInfo)
 		err = tower.SendToClient(b)
-		if err != towersvc.ErrorClose {
+		if err != towersvc.ErrorClosed {
 			fmt.Println("err:", err)
 		}
 	})

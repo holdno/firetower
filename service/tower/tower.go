@@ -192,9 +192,13 @@ func (t *FireTower[T]) unbindTopic(topic []string) []string {
 
 func (t *FireTower[T]) read() (*protocol.FireInfo[T], error) {
 	if t.isClose {
-		return nil, ErrorClose
+		return nil, ErrorClosed
 	}
-	return <-t.readIn, nil
+	fire, ok := <-t.readIn
+	if !ok {
+		return nil, ErrorClosed
+	}
+	return fire, nil
 }
 
 // Close 关闭客户端连接并注销
@@ -234,6 +238,7 @@ func (t *FireTower[T]) Close() {
 			t.onOfflineHandler()
 		}
 		towerPool.Put(t)
+		t.logger.Debug("tower closed")
 	}
 }
 
@@ -241,26 +246,28 @@ var heartbeat = []byte{104, 101, 97, 114, 116, 98, 101, 97, 116}
 
 func (t *FireTower[T]) sendLoop() {
 	heartTicker := time.NewTicker(time.Duration(t.tm.cfg.Heartbeat) * time.Second)
+	defer func() {
+		heartTicker.Stop()
+		t.Close()
+		close(t.sendOut)
+	}()
 	for {
 		select {
 		case wsMsg := <-t.sendOut:
 			if t.ws != nil {
 				if err := t.SendToClient(wsMsg); err != nil {
-					goto collapse
+					return
 				}
 			}
 		case <-heartTicker.C:
 			// sendMessage.Data = []byte{104, 101, 97, 114, 116, 98, 101, 97, 116} // []byte("heartbeat")
 			if err := t.SendToClient(heartbeat); err != nil {
-				goto collapse
+				return
 			}
 		case <-t.closeChan:
-			heartTicker.Stop()
 			return
 		}
 	}
-collapse:
-	t.Close()
 }
 
 func (t *FireTower[T]) readLoop() {
@@ -271,11 +278,13 @@ func (t *FireTower[T]) readLoop() {
 		if err := recover(); err != nil {
 			t.tm.logger.Error("readloop panic", zap.Any("error", err))
 		}
+		t.Close()
+		close(t.readIn)
 	}()
 	for {
 		messageType, data, err := t.ws.ReadMessage()
 		if err != nil { // 断开连接
-			goto collapse // 出现问题烽火台直接坍塌
+			return
 		}
 		fire := t.tm.NewFire(protocol.SourceClient, t) // 从对象池中获取消息对象 降低GC压力
 		fire.MessageType = messageType
@@ -301,8 +310,6 @@ func (t *FireTower[T]) readLoop() {
 		}()
 
 	}
-collapse:
-	t.Close()
 }
 
 // 处理前端发来的数据
@@ -311,11 +318,12 @@ func (t *FireTower[T]) readDispose() {
 	for {
 		fire, err := t.read()
 		if err != nil {
-			t.logger.Error("failed to read message from websocket, tower will be closed", zap.Error(err))
-			t.Close()
+			t.logger.Error("failed to read message from websocket", zap.Error(err))
 			return
 		}
-		go t.readLogic(fire)
+		if fire != nil {
+			go t.readLogic(fire)
+		}
 	}
 }
 
@@ -401,12 +409,11 @@ func (t *FireTower[T]) SendToClient(b []byte) error {
 	if t.ws == nil {
 		return ErrorServerSideMode
 	}
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
+
 	if t.isClose != true {
 		return t.ws.WriteMessage(websocket.TextMessage, b)
 	}
-	return ErrorClose
+	return ErrorClosed
 }
 
 // SetOnConnectHandler 建立连接事件
