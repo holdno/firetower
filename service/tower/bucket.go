@@ -1,10 +1,12 @@
 package tower
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/holdno/firetower/config"
 	"github.com/holdno/firetower/pkg/log"
 	"github.com/holdno/firetower/pkg/nats"
@@ -19,25 +21,10 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	// tm 是一个实例的管理中心
-	tm       *TowerManager
-	firePool *sync.Pool
-)
-
-func init() {
-	firePool = &sync.Pool{
-		New: func() interface{} {
-			return &protocol.FireInfo{
-				Context: protocol.FireLife{},
-				Message: protocol.TopicMessage{},
-			}
-		},
-	}
-}
-
-type Manager interface {
-	protocol.Pusher
+type Manager[T any] interface {
+	protocol.Pusher[T]
+	BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower[T], err error)
+	NewFire(source protocol.FireSource, tower PusherInfo) *protocol.FireInfo[T]
 	GetTopics() (map[string]uint64, error)
 	ClusterID() int64
 	Store() stores
@@ -46,35 +33,36 @@ type Manager interface {
 
 // TowerManager 包含中心处理队列和多个bucket
 // bucket的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
-type TowerManager struct {
+type TowerManager[T any] struct {
 	cfg         config.FireTowerConfig
-	bucket      []*Bucket
-	centralChan chan *protocol.FireInfo // 中心处理队列
+	bucket      []*Bucket[T]
+	centralChan chan *protocol.FireInfo[T] // 中心处理队列
 	ip          string
 	clusterID   int64
+	timeout     time.Duration
 
 	stores       stores
 	logger       *zap.Logger
 	topicCounter chan counterMsg
 	connCounter  chan counterMsg
 
-	coder protocol.Coder
-	protocol.Pusher
+	coder protocol.Coder[T]
+	protocol.Pusher[T]
 
 	isClose   bool
 	closeChan chan struct{}
 
-	brazier protocol.Brazier
+	brazier protocol.Brazier[T]
 
 	onTopicCountChangedHandler func(Topic string)
 	onConnCountChangedHandler  func()
 }
 
-func (t *TowerManager) SetTopicCountChangedHandler(f func(string)) {
+func (t *TowerManager[T]) SetTopicCountChangedHandler(f func(string)) {
 	t.onTopicCountChangedHandler = f
 }
 
-func (t *TowerManager) SetConnCountChangedHandler(f func()) {
+func (t *TowerManager[T]) SetConnCountChangedHandler(f func()) {
 	t.onConnCountChangedHandler = f
 }
 
@@ -90,57 +78,68 @@ type stores interface {
 }
 
 // Bucket 的作用是将一个实例的连接均匀的分布在多个bucket中来达到并发推送的目的
-type Bucket struct {
+type Bucket[T any] struct {
+	tm  *TowerManager[T]
 	mu  sync.RWMutex // 读写锁，可并发读不可并发读写
 	id  int64
 	len int64
 	// topicRelevance map[string]map[string]*FireTower // topic -> websocket clientid -> websocket conn
-	topicRelevance cmap.ConcurrentMap[string, cmap.ConcurrentMap[string, *FireTower]]
-	BuffChan       chan *protocol.FireInfo // bucket的消息处理队列
+	topicRelevance cmap.ConcurrentMap[string, cmap.ConcurrentMap[string, *FireTower[T]]]
+	BuffChan       chan *protocol.FireInfo[T] // bucket的消息处理队列
+	sendTimeout    time.Duration
 }
 
-type TowerOption func(t *TowerManager)
+type TowerOption[T any] func(t *TowerManager[T])
 
-func BuildWithPusher(pusher protocol.Pusher) TowerOption {
-	return func(t *TowerManager) {
+func BuildWithPusher[T any](pusher protocol.Pusher[T]) TowerOption[T] {
+	return func(t *TowerManager[T]) {
 		t.Pusher = pusher
 	}
 }
 
-func BuildWithCoder(coder protocol.Coder) TowerOption {
-	return func(t *TowerManager) {
+func BuildWithMessageDisposeTimeout[T any](timeout time.Duration) TowerOption[T] {
+	return func(t *TowerManager[T]) {
+		if timeout > 0 {
+			t.timeout = timeout
+		}
+	}
+}
+
+func BuildWithCoder[T any](coder protocol.Coder[T]) TowerOption[T] {
+	return func(t *TowerManager[T]) {
 		t.coder = coder
 	}
 }
 
-func BuildWithStore(store stores) TowerOption {
-	return func(t *TowerManager) {
+func BuildWithStore[T any](store stores) TowerOption[T] {
+	return func(t *TowerManager[T]) {
 		t.stores = store
 	}
 }
 
-func BuildWithClusterID(id int64) TowerOption {
-	return func(t *TowerManager) {
+func BuildWithClusterID[T any](id int64) TowerOption[T] {
+	return func(t *TowerManager[T]) {
 		t.clusterID = id
 	}
 }
 
-func BuildWithLogger(logger *zap.Logger) TowerOption {
-	return func(t *TowerManager) {
+func BuildWithLogger[T any](logger *zap.Logger) TowerOption[T] {
+	return func(t *TowerManager[T]) {
 		t.logger = logger
 	}
 }
 
-func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, error) {
-	tm = &TowerManager{
+func BuildFoundation[T any](cfg config.FireTowerConfig, opts ...TowerOption[T]) (Manager[T], error) {
+	tm := &TowerManager[T]{
 		cfg:          cfg,
-		bucket:       make([]*Bucket, cfg.Bucket.Num),
-		centralChan:  make(chan *protocol.FireInfo, cfg.Bucket.CentralChanCount),
-		topicCounter: make(chan counterMsg, 200000),
-		connCounter:  make(chan counterMsg, 200000),
+		bucket:       make([]*Bucket[T], cfg.Bucket.Num),
+		centralChan:  make(chan *protocol.FireInfo[T], cfg.Bucket.CentralChanCount),
+		topicCounter: make(chan counterMsg, 20000),
+		connCounter:  make(chan counterMsg, 20000),
 		closeChan:    make(chan struct{}),
-		brazier:      &brazier{},
+		brazier:      newBrazier[T](),
 		logger:       log.New(log.Config{Level: zap.DebugLevel}),
+		timeout:      time.Second,
 	}
 
 	for _, opt := range opts {
@@ -153,7 +152,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 	}
 
 	if tm.coder == nil {
-		tm.coder = &protocol.DefaultCoder{}
+		tm.coder = &protocol.DefaultCoder[T]{}
 	}
 
 	if tm.Pusher == nil {
@@ -194,7 +193,7 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 	utils.SetupIDWorker(tm.clusterID)
 
 	for i := range tm.bucket {
-		tm.bucket[i] = newBucket(cfg.Bucket.BuffChanCount, cfg.Bucket.ConsumerNum)
+		tm.bucket[i] = newBucket[T](tm, cfg.Bucket.BuffChanCount, cfg.Bucket.ConsumerNum)
 	}
 
 	go func() {
@@ -269,8 +268,8 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 		for {
 			select {
 			case fire := <-tm.Receive():
-				for i := range tm.bucket {
-					tm.bucket[i].BuffChan <- fire
+				for _, b := range tm.bucket {
+					b.BuffChan <- fire
 				}
 			case <-tm.closeChan:
 				return
@@ -281,31 +280,33 @@ func BuildFoundation(cfg config.FireTowerConfig, opts ...TowerOption) (Manager, 
 	return tm, nil
 }
 
-func (t *TowerManager) Logger() *zap.Logger {
+func (t *TowerManager[T]) Logger() *zap.Logger {
 	return t.logger
 }
 
-func (t *TowerManager) Store() stores {
+func (t *TowerManager[T]) Store() stores {
 	return t.stores
 }
 
-func (t *TowerManager) GetTopics() (map[string]uint64, error) {
+func (t *TowerManager[T]) GetTopics() (map[string]uint64, error) {
 	return t.stores.ClusterTopicStore().ClusterTopics()
 }
 
-func (t *TowerManager) ClusterID() int64 {
-	if tm == nil {
+func (t *TowerManager[T]) ClusterID() int64 {
+	if t == nil {
 		panic("firetower cluster not setup")
 	}
-	return tm.clusterID
+	return t.clusterID
 }
 
-func newBucket(buff int64, consumerNum int) *Bucket {
-	b := &Bucket{
+func newBucket[T any](tm *TowerManager[T], buff int64, consumerNum int) *Bucket[T] {
+	b := &Bucket[T]{
+		tm:             tm,
 		id:             getNewBucketId(),
 		len:            0,
-		topicRelevance: cmap.New[cmap.ConcurrentMap[string, *FireTower]](),
-		BuffChan:       make(chan *protocol.FireInfo, buff),
+		topicRelevance: cmap.New[cmap.ConcurrentMap[string, *FireTower[T]]](),
+		BuffChan:       make(chan *protocol.FireInfo[T], buff),
+		sendTimeout:    tm.timeout,
 	}
 
 	if consumerNum == 0 {
@@ -334,25 +335,25 @@ func getConnId() uint64 {
 }
 
 // GetBucket 获取一个可以分配当前连接的bucket
-func (t *TowerManager) GetBucket(bt *FireTower) (bucket *Bucket) {
+func (t *TowerManager[T]) GetBucket(bt *FireTower[T]) (bucket *Bucket[T]) {
 	bucket = t.bucket[bt.connID%uint64(len(t.bucket))]
 	return
 }
 
 // 来自publish的消息
-func (b *Bucket) consumer() {
+func (b *Bucket[T]) consumer() {
 	for {
 		select {
 		case fire := <-b.BuffChan:
 			switch fire.Message.Type {
-			case protocol.OfflineTopicByUserIdKey:
+			case protocol.OfflineTopicByUserIdOperation:
 				// 需要退订的topic和user_id
 				// todo use api
 				b.unSubscribeByUserId(fire)
-			case protocol.OfflineTopicKey:
+			case protocol.OfflineTopicOperation:
 				// todo use api
 				b.unSubscribeAll(fire)
-			case protocol.OfflineUserKey:
+			case protocol.OfflineUserOperation:
 				// todo use api
 				b.offlineUsers(fire)
 			default:
@@ -363,22 +364,22 @@ func (b *Bucket) consumer() {
 }
 
 // AddSubscribe 添加当前实例中的topic->conn的订阅关系
-func (b *Bucket) AddSubscribe(topic string, bt *FireTower) {
+func (b *Bucket[T]) AddSubscribe(topic string, bt *FireTower[T]) {
 	if m, ok := b.topicRelevance.Get(topic); ok {
 		m.Set(bt.ClientID(), bt)
 	} else {
-		inner := cmap.New[*FireTower]()
+		inner := cmap.New[*FireTower[T]]()
 		inner.Set(bt.ClientID(), bt)
 		b.topicRelevance.Set(topic, inner)
 	}
-	tm.topicCounter <- counterMsg{
+	b.tm.topicCounter <- counterMsg{
 		Key: topic,
 		Num: 1,
 	}
 }
 
 // DelSubscribe 删除当前实例中的topic->conn的订阅关系
-func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
+func (b *Bucket[T]) DelSubscribe(topic string, bt *FireTower[T]) {
 	if inner, ok := b.topicRelevance.Get(topic); ok {
 		inner.Remove(bt.clientID)
 		if inner.IsEmpty() {
@@ -386,7 +387,7 @@ func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 		}
 	}
 
-	tm.topicCounter <- counterMsg{
+	b.tm.topicCounter <- counterMsg{
 		Key: topic,
 		Num: -1,
 	}
@@ -396,72 +397,80 @@ func (b *Bucket) DelSubscribe(topic string, bt *FireTower) {
 // 每个bucket有一个Push方法
 // 在推送时每个bucket同时调用Push方法 来达到并发推送
 // 该方法主要通过遍历桶中的topic->conn订阅关系来进行websocket写入
-func (b *Bucket) push(message *protocol.FireInfo) error {
+func (b *Bucket[T]) push(message *protocol.FireInfo[T]) error {
 	if m, ok := b.topicRelevance.Get(message.Message.Topic); ok {
 		for _, v := range m.Items() {
 			if v.isClose {
-				return ErrorClose
+				continue
 			}
 
 			if v.receivedHandler != nil && !v.receivedHandler(message) {
-				return nil
+				continue
 			}
 
 			if v.ws != nil {
-				v.sendOut <- message
+				func() {
+					ctx, cancel := context.WithTimeout(context.Background(), b.sendTimeout)
+					defer cancel()
+					select {
+					case v.sendOut <- message.Message.Json():
+					case <-ctx.Done():
+						if v.sendTimeoutHandler != nil {
+							v.sendTimeoutHandler(message)
+						}
+					}
+				}()
 			}
 		}
-		return nil
 	}
-	return ErrorTopicEmpty
+	return nil
 }
 
 // UnSubscribeByUserId 服务端指定某个用户退订某个topic
-func (b *Bucket) unSubscribeByUserId(fire *protocol.FireInfo) error {
+func (b *Bucket[T]) unSubscribeByUserId(fire *protocol.FireInfo[T]) error {
 	if m, ok := b.topicRelevance.Get(fire.Message.Topic); ok {
-		userId := string(fire.Message.Data)
-		for _, v := range m.Items() {
-			if v.UserID() == userId {
-				_, err := v.unbindTopic([]string{fire.Message.Topic})
-				if v.unSubscribeHandler != nil {
-					v.unSubscribeHandler(fire.Context, []string{fire.Message.Topic})
+		userId, ok := fire.Context.ExtMeta[protocol.SYSTEM_CMD_REMOVE_USER]
+		if ok {
+			for _, v := range m.Items() {
+				if v.UserID() == userId {
+					v.unbindTopic([]string{fire.Message.Topic})
+					if v.unSubscribeHandler != nil {
+						v.unSubscribeHandler(fire.Context, []string{fire.Message.Topic})
+					}
+					return nil
 				}
-				if err != nil {
-					return err
-				}
-				return nil
 			}
+			return nil
 		}
-		return nil
 	}
 
 	return ErrorTopicEmpty
 }
 
 // UnSubscribeAll 移除所有该topic的订阅关系
-func (b *Bucket) unSubscribeAll(fire *protocol.FireInfo) error {
+func (b *Bucket[T]) unSubscribeAll(fire *protocol.FireInfo[T]) error {
 	if m, ok := b.topicRelevance.Get(fire.Message.Topic); ok {
 		for _, v := range m.Items() {
-			_, err := v.unbindTopic([]string{fire.Message.Topic})
+			v.unbindTopic([]string{fire.Message.Topic})
 			// 移除所有人的应该不需要执行回调方法
 			if v.onSystemRemove != nil {
 				v.onSystemRemove(fire.Message.Topic)
 			}
-			if err != nil {
-				return err
-			}
 		}
+		return nil
 	}
 	return ErrorTopicEmpty
 }
 
-func (b *Bucket) offlineUsers(fire *protocol.FireInfo) error {
+func (b *Bucket[T]) offlineUsers(fire *protocol.FireInfo[T]) error {
 	if m, ok := b.topicRelevance.Get(fire.Message.Topic); ok {
-		userId := string(fire.Message.Data)
-		for _, v := range m.Items() {
-			if v.UserID() == userId {
-				v.Close()
-				return nil
+		userId, ok := fire.Context.ExtMeta[protocol.SYSTEM_CMD_REMOVE_USER]
+		if ok {
+			for _, v := range m.Items() {
+				if v.UserID() == userId {
+					v.Close()
+					return nil
+				}
 			}
 		}
 	}

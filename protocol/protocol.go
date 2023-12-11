@@ -23,9 +23,9 @@ import (
 // 	Type     string `json:"t"`
 // }
 
-type Coder interface {
-	Decode([]byte, *FireInfo) error
-	Encode(msg *FireInfo) []byte
+type Coder[T any] interface {
+	Decode([]byte, *FireInfo[T]) error
+	Encode(msg *FireInfo[T]) []byte
 }
 
 type WebSocketMessage struct {
@@ -34,24 +34,38 @@ type WebSocketMessage struct {
 }
 
 // FireInfo 接收的消息结构体
-type FireInfo struct {
-	Context     FireLife     `json:"c"`
-	MessageType int          `json:"t"`
-	Message     TopicMessage `json:"m"`
+type FireInfo[T any] struct {
+	Context     FireLife        `json:"c"`
+	MessageType int             `json:"t"`
+	Message     TopicMessage[T] `json:"m"`
 }
 
-func (f *FireInfo) Copy() FireInfo {
+func (f *FireInfo[T]) Copy() FireInfo[T] {
 	return *f
 }
 
-// TopicMessage 话题信息结构体
-type TopicMessage struct {
-	Topic string          `json:"topic"`
-	Data  json.RawMessage `json:"data"` // 可能是个json
-	Type  string          `json:"type"`
+func (f *FireInfo[T]) GetContext() FireLife {
+	return f.Context
 }
 
-func (s *TopicMessage) Json() []byte {
+func (f *FireInfo[T]) GetMessage() TopicMessage[T] {
+	return f.Message
+}
+
+type ReadOnlyFire[T any] interface {
+	GetContext() FireLife
+	GetMessage() TopicMessage[T]
+	Copy() FireInfo[T]
+}
+
+// TopicMessage 话题信息结构体
+type TopicMessage[T any] struct {
+	Topic string        `json:"topic"`
+	Data  T             `json:"data,omitempty"`
+	Type  FireOperation `json:"type"`
+}
+
+func (s *TopicMessage[T]) Json() []byte {
 	raw, _ := json.Marshal(s)
 	return raw
 }
