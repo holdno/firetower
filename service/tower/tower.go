@@ -267,12 +267,15 @@ func (t *FireTower[T]) sendLoop() {
 				}
 			}
 		case wsMsg := <-t.sendOutBlock:
-			if t.ws != nil {
-				if err := t.sendToClient(wsMsg.sendOutMessage); err != nil {
-					wsMsg.response <- err
-					return
-				}
+			if t.ws == nil {
+				wsMsg.response <- fmt.Errorf("send to none websocket client")
+				return
 			}
+			if err := t.sendToClient(wsMsg.sendOutMessage); err != nil {
+				wsMsg.response <- err
+				return
+			}
+			wsMsg.response <- nil
 		case <-heartTicker.C:
 			// sendMessage.Data = []byte{104, 101, 97, 114, 116, 98, 101, 97, 116} // []byte("heartbeat")
 			if err := t.sendToClient(heartbeat); err != nil {
@@ -436,7 +439,7 @@ func (t *FireTower[T]) SendToClientBlock(b []byte) error {
 
 	msg := BlockMessage{
 		sendOutMessage: b,
-		response:       make(chan error),
+		response:       make(chan error, 1),
 	}
 	t.sendOutBlock <- msg
 
