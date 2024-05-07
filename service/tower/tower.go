@@ -20,6 +20,11 @@ var (
 	towerPool sync.Pool
 )
 
+type BlockMessage struct {
+	sendOutMessage []byte
+	response       chan error
+}
+
 // FireTower 客户端连接结构体
 // 包含了客户端一个连接的所有信息
 type FireTower[T any] struct {
@@ -31,15 +36,16 @@ type FireTower[T any] struct {
 	Cookie    []byte // 这里提供给业务放一个存放跟当前连接相关的数据信息
 	startTime time.Time
 
-	logger    *zap.Logger
-	timeout   time.Duration
-	readIn    chan *protocol.FireInfo[T] // 读取队列
-	sendOut   chan []byte                // 发送队列
-	ws        *websocket.Conn            // 保存底层websocket连接
-	topic     sync.Map                   // 订阅topic列表
-	isClose   bool                       // 判断当前websocket是否被关闭
-	closeChan chan struct{}              // 用来作为关闭websocket的触发点
-	mutex     sync.Mutex                 // 避免并发close chan
+	logger       *zap.Logger
+	timeout      time.Duration
+	readIn       chan *protocol.FireInfo[T] // 读取队列
+	sendOut      chan []byte                // 发送队列
+	sendOutBlock chan BlockMessage
+	ws           *websocket.Conn // 保存底层websocket连接
+	topic        sync.Map        // 订阅topic列表
+	isClose      bool            // 判断当前websocket是否被关闭
+	closeChan    chan struct{}   // 用来作为关闭websocket的触发点
+	mutex        sync.Mutex      // 避免并发close chan
 
 	onConnectHandler       func() bool
 	onOfflineHandler       func()
@@ -98,6 +104,7 @@ func buildNewTower[T any](tm *TowerManager[T], ws *websocket.Conn, clientID stri
 	t.ext = &sync.Map{}
 	t.readIn = make(chan *protocol.FireInfo[T], tm.cfg.ReadChanLens)
 	t.sendOut = make(chan []byte, tm.cfg.WriteChanLens)
+	t.sendOutBlock = make(chan BlockMessage)
 	t.topic = sync.Map{}
 	t.ws = ws
 	t.isClose = false
@@ -255,13 +262,20 @@ func (t *FireTower[T]) sendLoop() {
 		select {
 		case wsMsg := <-t.sendOut:
 			if t.ws != nil {
-				if err := t.SendToClient(wsMsg); err != nil {
+				if err := t.sendToClient(wsMsg); err != nil {
+					return
+				}
+			}
+		case wsMsg := <-t.sendOutBlock:
+			if t.ws != nil {
+				if err := t.sendToClient(wsMsg.sendOutMessage); err != nil {
+					wsMsg.response <- err
 					return
 				}
 			}
 		case <-heartTicker.C:
 			// sendMessage.Data = []byte{104, 101, 97, 114, 116, 98, 101, 97, 116} // []byte("heartbeat")
-			if err := t.SendToClient(heartbeat); err != nil {
+			if err := t.sendToClient(heartbeat); err != nil {
 				return
 			}
 		case <-t.closeChan:
@@ -405,7 +419,32 @@ func (t *FireTower[T]) Publish(fire *protocol.FireInfo[T]) error {
 // SendToClient 向自己推送消息
 // 这里描述一下使用场景
 // 只针对当前客户端进行的推送请调用该方法
-func (t *FireTower[T]) SendToClient(b []byte) error {
+func (t *FireTower[T]) SendToClient(b []byte) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if !t.isClose {
+		t.sendOut <- b
+	}
+}
+
+func (t *FireTower[T]) SendToClientBlock(b []byte) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if t.isClose {
+		return fmt.Errorf("send to closed firetower")
+	}
+
+	msg := BlockMessage{
+		sendOutMessage: b,
+		response:       make(chan error),
+	}
+	t.sendOutBlock <- msg
+
+	defer close(msg.response)
+	return <-msg.response
+}
+
+func (t *FireTower[T]) sendToClient(b []byte) error {
 	if t.ws == nil {
 		return ErrorServerSideMode
 	}

@@ -125,10 +125,7 @@ func (t *Tower) Websocket(w http.ResponseWriter, r *http.Request) {
 		}
 		messageInfo.Type = "timeout"
 		b, _ := json.Marshal(messageInfo)
-		err = tower.SendToClient(b)
-		if err != towersvc.ErrorClosed {
-			fmt.Println("err:", err)
-		}
+		tower.SendToClient(b)
 	})
 
 	tower.SetBeforeSubscribeHandler(func(context protocol.FireLife, topic []string) bool {
@@ -141,7 +138,6 @@ func (t *Tower) Websocket(w http.ResponseWriter, r *http.Request) {
 				messageInfo.Data = []byte(fmt.Sprintf(`{"type": "bind", "topic": "%s"}`, v))
 				msg, _ := json.Marshal(messageInfo)
 				tower.SendToClient(msg)
-				return false
 			}
 		}
 		return true
@@ -162,7 +158,7 @@ func (t *Tower) Websocket(w http.ResponseWriter, r *http.Request) {
 
 	ws.Close()
 
-	if err := tower.SendToClient([]byte("test")); err != nil {
+	if err := tower.SendToClientBlock([]byte("test")); err != nil {
 		fmt.Println("send error", err)
 	}
 }
