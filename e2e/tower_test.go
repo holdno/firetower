@@ -3,6 +3,7 @@ package e2e
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"testing"
@@ -15,7 +16,6 @@ import (
 	"github.com/holdno/firetower/utils"
 	"github.com/holdno/snowFlakeByGo"
 	jsoniter "github.com/json-iterator/go"
-	"go.uber.org/zap"
 )
 
 var upgrader = websocket.Upgrader{
@@ -80,7 +80,7 @@ func startTower() {
 		tm: tm,
 	}
 	http.HandleFunc(websocketPath, tower.Websocket)
-	tm.Logger().Info("http server start", zap.String("address", listenAddress))
+	tm.Logger().Info("http server start", slog.String("address", listenAddress))
 	if err := http.ListenAndServe(listenAddress, nil); err != nil {
 		panic(err)
 	}

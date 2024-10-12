@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"go.uber.org/zap"
 
 	"github.com/holdno/firetower/config"
 	"github.com/holdno/firetower/protocol"
@@ -36,7 +36,7 @@ type FireTower[T any] struct {
 	Cookie    []byte // 这里提供给业务放一个存放跟当前连接相关的数据信息
 	startTime time.Time
 
-	logger       *zap.Logger
+	logger       protocol.Logger
 	timeout      time.Duration
 	readIn       chan *protocol.FireInfo[T] // 读取队列
 	sendOut      chan []byte                // 发送队列
@@ -118,7 +118,7 @@ func buildNewTower[T any](tm *TowerManager[T], ws *websocket.Conn, clientID stri
 	t.unSubscribeHandler = nil
 	t.beforeSubscribeHandler = nil
 
-	t.logger = tm.logger.With(zap.String("client_id", t.clientID), zap.String("user_id", t.userID))
+	t.logger = tm.logger
 
 	return t
 }
@@ -293,7 +293,7 @@ func (t *FireTower[T]) readLoop() {
 	}
 	defer func() {
 		if err := recover(); err != nil {
-			t.tm.logger.Error("readloop panic", zap.Any("error", err))
+			t.tm.logger.Error("readloop panic", slog.Any("error", err))
 		}
 		t.Close()
 		close(t.readIn)
@@ -306,7 +306,7 @@ func (t *FireTower[T]) readLoop() {
 		fire := t.tm.NewFire(protocol.SourceClient, t) // 从对象池中获取消息对象 降低GC压力
 		fire.MessageType = messageType
 		if err := json.Unmarshal(data, &fire.Message); err != nil {
-			t.logger.Error("failed to unmarshal client data, filtered", zap.Error(err))
+			t.logger.Error("failed to unmarshal client data, filtered", slog.Any("error", err))
 			continue
 		}
 
@@ -320,7 +320,7 @@ func (t *FireTower[T]) readLoop() {
 				if t.readTimeoutHandler != nil {
 					t.readTimeoutHandler(fire)
 				}
-				t.logger.Error("readloop timeout", zap.Any("data", data))
+				t.logger.Error("readloop timeout", slog.Any("data", data))
 			case <-t.closeChan:
 			}
 			t.tm.brazier.Extinguished(fire)
@@ -335,7 +335,7 @@ func (t *FireTower[T]) readDispose() {
 	for {
 		fire, err := t.read()
 		if err != nil {
-			t.logger.Error("failed to read message from websocket", zap.Error(err))
+			t.logger.Error("failed to read message from websocket", slog.Any("error", err))
 			return
 		}
 		if fire != nil {
@@ -359,7 +359,7 @@ func (t *FireTower[T]) readLogic(fire *protocol.FireInfo[T]) error {
 			// 增加messageId 方便追踪
 			err := t.Subscribe(fire.Context, addTopics)
 			if err != nil {
-				t.logger.Error("failed to subscribe topics", zap.Strings("topics", addTopics), zap.Error(err))
+				t.logger.Error("failed to subscribe topics", slog.Any("topics", addTopics), slog.Any("error", err))
 				// TODO metrics
 				return err
 			}
@@ -367,7 +367,7 @@ func (t *FireTower[T]) readLogic(fire *protocol.FireInfo[T]) error {
 			delTopic := strings.Split(fire.Message.Topic, ",")
 			err := t.UnSubscribe(fire.Context, delTopic)
 			if err != nil {
-				t.logger.Error("failed to unsubscribe topics", zap.Strings("topics", delTopic), zap.Error(err))
+				t.logger.Error("failed to unsubscribe topics", slog.Any("topics", delTopic), slog.Any("error", err))
 				// TODO metrics
 				return err
 			}
@@ -413,7 +413,7 @@ func (t *FireTower[T]) UnSubscribe(context protocol.FireLife, topics []string) e
 func (t *FireTower[T]) Publish(fire *protocol.FireInfo[T]) error {
 	err := t.tm.Publish(fire)
 	if err != nil {
-		t.logger.Error("failed to publish message", zap.Error(err))
+		t.logger.Error("failed to publish message", slog.Any("error", err))
 		return err
 	}
 	return nil
@@ -520,6 +520,6 @@ func (t *FireTower[T]) GetConnectNum(topic string) (uint64, error) {
 	return number, nil
 }
 
-func (t *FireTower[T]) Logger() *zap.Logger {
+func (t *FireTower[T]) Logger() protocol.Logger {
 	return t.logger
 }

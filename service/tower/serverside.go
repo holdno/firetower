@@ -2,7 +2,6 @@ package tower
 
 import (
 	"github.com/holdno/firetower/protocol"
-	"go.uber.org/zap"
 )
 
 type ServerSideTower[T any] interface {
@@ -17,7 +16,7 @@ type ServerSideTower[T any] interface {
 	Publish(fire *protocol.FireInfo[T]) error
 	Subscribe(context protocol.FireLife, topics []string) error
 	UnSubscribe(context protocol.FireLife, topics []string) error
-	Logger() *zap.Logger
+	Logger() protocol.Logger
 	TopicList() []string
 	Run()
 	Close()

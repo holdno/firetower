@@ -1,18 +1,18 @@
 package nats
 
 import (
+	"log/slog"
 	"sync"
 
 	"github.com/holdno/firetower/config"
 	"github.com/holdno/firetower/protocol"
-	"go.uber.org/zap"
 
 	"github.com/nats-io/nats.go"
 )
 
 var _ protocol.Pusher[any] = (*pusher[any])(nil)
 
-func MustSetupNatsPusher[T any](cfg config.Nats, coder protocol.Coder[T], logger *zap.Logger, topicFunc func() map[string]uint64) protocol.Pusher[T] {
+func MustSetupNatsPusher[T any](cfg config.Nats, coder protocol.Coder[T], logger protocol.Logger, topicFunc func() map[string]uint64) protocol.Pusher[T] {
 	if cfg.SubjectPrefix == "" {
 		cfg.SubjectPrefix = "firetower.topic."
 	}
@@ -39,7 +39,7 @@ type pusher[T any] struct {
 	b             protocol.Brazier[T]
 	coder         protocol.Coder[T]
 	currentTopic  func() map[string]uint64
-	logger        *zap.Logger
+	logger        protocol.Logger
 }
 
 func (p *pusher[T]) Publish(fire *protocol.FireInfo[T]) error {
@@ -56,7 +56,7 @@ func (p *pusher[T]) Receive() chan *protocol.FireInfo[T] {
 			if _, exist := p.currentTopic()[topic]; exist {
 				fire := new(protocol.FireInfo[T])
 				if err := p.coder.Decode(msg.Data, fire); err != nil {
-					p.logger.Error("failed to decode message", zap.String("data", string(msg.Data)), zap.Error(err), zap.String("topic", topic))
+					p.logger.Error("failed to decode message", slog.String("data", string(msg.Data)), slog.Any("error", err), slog.String("topic", topic))
 					return
 				}
 				p.msg <- fire

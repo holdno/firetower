@@ -2,13 +2,15 @@ package tower
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/avast/retry-go/v4"
 	"github.com/gorilla/websocket"
 	"github.com/holdno/firetower/config"
-	"github.com/holdno/firetower/pkg/log"
 	"github.com/holdno/firetower/pkg/nats"
 	"github.com/holdno/firetower/protocol"
 	"github.com/holdno/firetower/store"
@@ -16,9 +18,7 @@ import (
 	"github.com/holdno/firetower/store/single"
 	"github.com/holdno/firetower/utils"
 
-	"github.com/holdno/rego"
 	cmap "github.com/orcaman/concurrent-map/v2"
-	"go.uber.org/zap"
 )
 
 type Manager[T any] interface {
@@ -28,7 +28,7 @@ type Manager[T any] interface {
 	GetTopics() (map[string]uint64, error)
 	ClusterID() int64
 	Store() stores
-	Logger() *zap.Logger
+	Logger() protocol.Logger
 }
 
 // TowerManager 包含中心处理队列和多个bucket
@@ -42,7 +42,7 @@ type TowerManager[T any] struct {
 	timeout     time.Duration
 
 	stores       stores
-	logger       *zap.Logger
+	logger       protocol.Logger
 	topicCounter chan counterMsg
 	connCounter  chan counterMsg
 
@@ -123,7 +123,7 @@ func BuildWithClusterID[T any](id int64) TowerOption[T] {
 	}
 }
 
-func BuildWithLogger[T any](logger *zap.Logger) TowerOption[T] {
+func BuildWithLogger[T any](logger protocol.Logger) TowerOption[T] {
 	return func(t *TowerManager[T]) {
 		t.logger = logger
 	}
@@ -138,8 +138,10 @@ func BuildFoundation[T any](cfg config.FireTowerConfig, opts ...TowerOption[T]) 
 		connCounter:  make(chan counterMsg, 20000),
 		closeChan:    make(chan struct{}),
 		brazier:      newBrazier[T](),
-		logger:       log.New(log.Config{Level: zap.DebugLevel}),
-		timeout:      time.Second,
+		logger: slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})),
+		timeout: time.Second,
 	}
 
 	for _, opt := range opts {
@@ -162,7 +164,7 @@ func BuildFoundation[T any](cfg config.FireTowerConfig, opts ...TowerOption[T]) 
 			tm.Pusher = nats.MustSetupNatsPusher(cfg.Cluster.NatsOption, tm.coder, tm.logger, func() map[string]uint64 {
 				m, err := tm.stores.ClusterTopicStore().Topics()
 				if err != nil {
-					tm.logger.Error("failed to get current node topics from nats", zap.Error(err))
+					tm.logger.Error("failed to get current node topics from nats", slog.Any("error", err))
 					return map[string]uint64{}
 				}
 				return m
@@ -205,11 +207,11 @@ func BuildFoundation[T any](cfg config.FireTowerConfig, opts ...TowerOption[T]) 
 		)
 
 		reportConn := func(counter int64) {
-			err := rego.Retry(func() error {
+			err := retry.Do(func() error {
 				return tm.stores.ClusterConnStore().OneClientAtomicAddBy(tm.ip, counter)
-			}, rego.WithLatestError(), rego.WithPeriod(time.Second), rego.WithBackoffFector(1.5), rego.WithTimes(16))
+			}, retry.Attempts(3), retry.LastErrorOnly(true))
 			if err != nil {
-				tm.logger.Error("failed to update the number of redis websocket connections", zap.Error(err))
+				tm.logger.Error("failed to update the number of redis websocket connections", slog.Any("error", err))
 				tm.connCounter <- counterMsg{
 					Key: tm.ip,
 					Num: counter,
@@ -223,11 +225,11 @@ func BuildFoundation[T any](cfg config.FireTowerConfig, opts ...TowerOption[T]) 
 
 		reportTopicConn := func(topicCounter map[string]int64) {
 			for t, n := range topicCounter {
-				err := rego.Retry(func() error {
+				err := retry.Do(func() error {
 					return tm.stores.ClusterTopicStore().TopicConnAtomicAddBy(t, n)
-				}, rego.WithLatestError(), rego.WithPeriod(time.Second), rego.WithBackoffFector(1.5), rego.WithTimes(10))
+				}, retry.Attempts(3), retry.LastErrorOnly(true))
 				if err != nil {
-					tm.logger.Error("failed to update the number of connections for the topic in redis", zap.Error(err))
+					tm.logger.Error("failed to update the number of connections for the topic in redis", slog.Any("error", err))
 					tm.topicCounter <- counterMsg{
 						Key: t,
 						Num: n,
@@ -280,7 +282,7 @@ func BuildFoundation[T any](cfg config.FireTowerConfig, opts ...TowerOption[T]) 
 	return tm, nil
 }
 
-func (t *TowerManager[T]) Logger() *zap.Logger {
+func (t *TowerManager[T]) Logger() protocol.Logger {
 	return t.logger
 }
 

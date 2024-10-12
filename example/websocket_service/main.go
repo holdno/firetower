@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	_ "net/http/pprof"
 	"strconv"
@@ -16,7 +17,6 @@ import (
 	"github.com/holdno/firetower/utils"
 	"github.com/holdno/snowFlakeByGo"
 	json "github.com/json-iterator/go"
-	"go.uber.org/zap"
 )
 
 var upgrader = websocket.Upgrader{
@@ -97,7 +97,7 @@ func main() {
 		tm: tm,
 	}
 	http.HandleFunc("/ws", tower.Websocket)
-	tm.Logger().Info("http server start", zap.String("address", "0.0.0.0:9999"))
+	tm.Logger().Info("http server start", slog.String("address", "0.0.0.0:9999"))
 	if err := http.ListenAndServe("0.0.0.0:9999", nil); err != nil {
 		panic(err)
 	}
@@ -219,7 +219,7 @@ func (t *Tower) Websocket(w http.ResponseWriter, r *http.Request) {
 				for _, v := range tower.TopicList() {
 					num, err := tower.GetConnectNum(v)
 					if err != nil {
-						tower.Logger().Error("failed to get connect number", zap.Error(err))
+						tower.Logger().Error("failed to get connect number", slog.Any("error", err))
 						continue
 					}
 					if topicConnCache[v] == num {

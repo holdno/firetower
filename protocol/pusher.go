@@ -1,14 +1,19 @@
 package protocol
 
 import (
+	"log/slog"
 	"sync"
-
-	"go.uber.org/zap"
 )
 
 type Pusher[T any] interface {
 	Publish(fire *FireInfo[T]) error
 	Receive() chan *FireInfo[T]
+}
+
+type Logger interface {
+	Info(string, ...any)
+	Debug(string, ...any)
+	Error(string, ...any)
 }
 
 type SinglePusher[T any] struct {
@@ -17,7 +22,7 @@ type SinglePusher[T any] struct {
 	once     sync.Once
 	coder    Coder[T]
 	fireChan chan *FireInfo[T]
-	logger   *zap.Logger
+	logger   Logger
 }
 
 func (s *SinglePusher[T]) Publish(fire *FireInfo[T]) error {
@@ -34,7 +39,7 @@ func (s *SinglePusher[T]) Receive() chan *FireInfo[T] {
 					fire := new(FireInfo[T])
 					err := s.coder.Decode(m, fire)
 					if err != nil {
-						s.logger.Error("failed to decode message", zap.String("data", string(m)), zap.Error(err))
+						s.logger.Error("failed to decode message", slog.String("data", string(m)), slog.String("error", err.Error()))
 						continue
 					}
 					s.fireChan <- fire
@@ -50,11 +55,12 @@ type Brazier[T any] interface {
 	LightAFire() *FireInfo[T]
 }
 
-func DefaultPusher[T any](b Brazier[T], coder Coder[T], logger *zap.Logger) *SinglePusher[T] {
+func DefaultPusher[T any](b Brazier[T], coder Coder[T], logger Logger) *SinglePusher[T] {
 	return &SinglePusher[T]{
 		msg:      make(chan []byte, 100),
 		b:        b,
 		coder:    coder,
 		fireChan: make(chan *FireInfo[T], 10000),
+		logger:   logger,
 	}
 }
