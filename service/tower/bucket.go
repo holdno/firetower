@@ -24,6 +24,7 @@ import (
 type Manager[T any] interface {
 	protocol.Pusher[T]
 	BuildTower(ws *websocket.Conn, clientId string) (tower *FireTower[T], err error)
+	BuildServerSideTower(clientId string) ServerSideTower[T]
 	NewFire(source protocol.FireSource, tower PusherInfo) *protocol.FireInfo[T]
 	GetTopics() (map[string]uint64, error)
 	ClusterID() int64
